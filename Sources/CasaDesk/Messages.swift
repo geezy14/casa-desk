@@ -27,12 +27,12 @@ final class ChatDB {
     }
     deinit { sqlite3_close(db) }
 
-    struct Row { let date: Date; let fromMe: Bool; let handle: String; let text: String; let chatName: String?; let isGroup: Bool }
+    struct Row { let date: Date; let fromMe: Bool; let handle: String; let text: String; let chatName: String?; let isGroup: Bool; let chatGuid: String }
 
     /// Messages matching the filters, newest first. `handles` limits to those people (1:1 unless includeGroups).
     func query(handles: [String]?, search: String?, since: Date?, until: Date?, includeGroups: Bool, limit: Int) -> [Row] {
         var sql = """
-        SELECT m.date, m.is_from_me, COALESCE(h.id, ''), m.text, m.attributedBody, c.display_name, c.style
+        SELECT m.date, m.is_from_me, COALESCE(h.id, ''), m.text, m.attributedBody, c.display_name, c.style, COALESCE(c.guid, '')
         FROM message m
         LEFT JOIN handle h ON h.ROWID = m.handle_id
         LEFT JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
@@ -78,7 +78,8 @@ final class ChatDB {
             if let search, !text.localizedCaseInsensitiveContains(search) { continue }
             let chatName = sqlite3_column_text(st, 5).map { String(cString: $0) }
             let isGroup = sqlite3_column_int(st, 6) == 43
-            rows.append(Row(date: date, fromMe: fromMe, handle: handle, text: text, chatName: chatName?.isEmpty == true ? nil : chatName, isGroup: isGroup))
+            let guid = String(cString: sqlite3_column_text(st, 7))
+            rows.append(Row(date: date, fromMe: fromMe, handle: handle, text: text, chatName: chatName?.isEmpty == true ? nil : chatName, isGroup: isGroup, chatGuid: guid))
             if rows.count >= limit { break }
         }
         return rows
@@ -123,6 +124,8 @@ func messages(_ a: Args) -> Never {
         Out.fail("can't read Messages history", "Give Full Disk Access to the app that runs casa-desk (System Settings → Privacy & Security → Full Disk Access), then try again.", code: 3)
     }
     let names = HandleNames()
+    if a.positional.dropFirst().first == "chats" { chats(a, db, names) }
+    guard a.positional.dropFirst().first ?? "search" == "search" else { Out.fail("unknown messages command", "Use: messages search | messages chats", code: 2) }
     let since = a.day("--since"), until = a.options["--until"].flatMap { LA.endOfDay($0) }
     var handles: [String]? = nil
     var search = a.options["--search"]
@@ -145,7 +148,7 @@ func messages(_ a: Args) -> Never {
                         includeGroups: a.flags.contains("--groups") || handles == nil, limit: a.limit)
     let out: [[String: Any]] = rows.map { r in
         var d: [String: Any] = ["date": LA.iso(r.date), "from": r.fromMe ? "me" : (names.name(r.handle) ?? r.handle), "text": r.text]
-        if r.isGroup { d["group"] = r.chatName ?? "group chat" }
+        if r.isGroup { d["group"] = r.chatName ?? "group chat"; d["chatGuid"] = r.chatGuid }
         return d
     }
     Out.emit(["count": out.count, "messages": out]) {
@@ -156,4 +159,32 @@ func messages(_ a: Args) -> Never {
 /// For doctor: can this process read chat.db right now?
 func messagesStatus() -> String {
     ChatDB() != nil ? "granted (Full Disk Access)" : "needs Full Disk Access for the app running casa-desk"
+}
+
+/// Recent conversations (newest first) with their guid, name and people — for finding a group chat.
+func chats(_ a: Args, _ db: ChatDB, _ names: HandleNames) -> Never {
+    let sql = """
+    SELECT c.ROWID, c.guid, COALESCE(c.display_name, ''), c.style, MAX(cmj.message_date)
+    FROM chat c JOIN chat_message_join cmj ON cmj.chat_id = c.ROWID
+    GROUP BY c.ROWID ORDER BY 5 DESC
+    """
+    var st: OpaquePointer?, people: OpaquePointer?
+    guard sqlite3_prepare_v2(db.db, sql, -1, &st, nil) == SQLITE_OK,
+          sqlite3_prepare_v2(db.db, "SELECT h.id FROM chat_handle_join chj JOIN handle h ON h.ROWID = chj.handle_id WHERE chj.chat_id = ?", -1, &people, nil) == SQLITE_OK
+    else { Out.fail("couldn't read chats", "chat.db layout not recognized.", code: 5) }
+    defer { sqlite3_finalize(st); sqlite3_finalize(people) }
+    let q = a.options["--q"]
+    var rows: [[String: Any]] = []
+    while sqlite3_step(st) == SQLITE_ROW, rows.count < a.limit {
+        sqlite3_reset(people); sqlite3_bind_int64(people, 1, sqlite3_column_int64(st, 0))
+        var who: [String] = []
+        while sqlite3_step(people) == SQLITE_ROW { let h = String(cString: sqlite3_column_text(people, 0)); who.append(names.name(h) ?? h) }
+        let name = String(cString: sqlite3_column_text(st, 2))
+        if let q, !name.localizedCaseInsensitiveContains(q), !who.contains(where: { $0.localizedCaseInsensitiveContains(q) }) { continue }
+        rows.append(["chatGuid": String(cString: sqlite3_column_text(st, 1)), "name": name.isEmpty ? who.joined(separator: ", ") : name,
+                     "group": sqlite3_column_int(st, 3) == 43, "people": who, "lastMessage": LA.iso(AppleTime.date(sqlite3_column_int64(st, 4)))])
+    }
+    Out.emit(["count": rows.count, "chats": rows]) {
+        rows.map { "\($0["lastMessage"]!)  \($0["name"]!)\(($0["group"] as! Bool) ? "  (group)" : "")" }.joined(separator: "\n")
+    }
 }

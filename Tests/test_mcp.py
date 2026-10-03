@@ -11,7 +11,9 @@ import unittest
 
 SERVER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mcp", "casa-desk-mcp.py")
 EXPECTED = {"doctor", "calendar_list", "calendar_search", "reminders_lists", "reminders_list", "contacts_search",
-            "contacts_show", "notes_search", "notes_show", "messages_search"}
+            "contacts_show", "notes_search", "notes_show", "messages_search", "messages_chats", "mail_list", "mail_search",
+            "mail_read", "shortcuts_list", "icloud_list", "icloud_read", "spotlight_search", "focus_status",
+            "safari_bookmarks", "safari_reading_list"}
 
 
 def session(messages):

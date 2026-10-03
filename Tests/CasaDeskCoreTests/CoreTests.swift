@@ -57,6 +57,45 @@ final class CoreTests: XCTestCase {
         XCTAssertNil(TypedStream.string(from: Array("NSString".utf8) + [0x2B, 0x50, 0x41]))   // length past the end
     }
 
+    func testPathsStayInsideRoot() {
+        XCTAssertTrue(Paths.isInside("/tmp/root/a/b.txt", root: "/tmp/root"))
+        XCTAssertFalse(Paths.isInside("/tmp/root/../etc/passwd", root: "/tmp/root"))
+        XCTAssertFalse(Paths.isInside("/tmp/rootkit/x", root: "/tmp/root"))
+    }
+
+    func testSpotlightRefusesSecretStores() {
+        let h = "/Users/someone"
+        XCTAssertTrue(Paths.isRefused("\(h)/Library/Keychains/login.keychain-db", home: h))
+        XCTAssertTrue(Paths.isRefused("\(h)/Library/Messages/chat.db", home: h))
+        XCTAssertTrue(Paths.isRefused("\(h)/Library/Mail/V10/x.emlx", home: h))
+        XCTAssertTrue(Paths.isRefused("\(h)/Library/Cookies/Cookies.binarycookies", home: h))
+        XCTAssertFalse(Paths.isRefused("\(h)/Documents/taxes.pdf", home: h))
+        XCTAssertFalse(Paths.isRefused("\(h)/Library/MailingLists.txt", home: h))
+    }
+
+    func testSafariBookmarksAndReadingList() {
+        let leaf: (String, String) -> [String: Any] = { t, u in ["WebBookmarkType": "WebBookmarkTypeLeaf", "URLString": u, "URIDictionary": ["title": t]] }
+        let root: [String: Any] = ["Children": [
+            ["Title": "History", "WebBookmarkType": "WebBookmarkTypeProxy"],
+            ["Title": "BookmarksBar", "WebBookmarkType": "WebBookmarkTypeList", "Children": [leaf("Apple", "https://apple.com"),
+                ["Title": "dev", "WebBookmarkType": "WebBookmarkTypeList", "Children": [leaf("Swift", "https://swift.org")]]]],
+            ["Title": "com.apple.ReadingList", "WebBookmarkType": "WebBookmarkTypeList", "Children": [leaf("Later", "https://example.com")]],
+        ]]
+        let p = SafariBookmarks.parse(root)
+        XCTAssertEqual(p.bookmarks.map(\.title), ["Apple", "Swift"])
+        XCTAssertEqual(p.bookmarks.last?.folder, "Favorites/dev")
+        XCTAssertEqual(p.readingList.map(\.url), ["https://example.com"])
+    }
+
+    func testFocusStatus() {
+        let modes: [String: Any] = ["data": [["modeConfigurations": ["com.apple.focus.work": ["mode": ["name": "Work"]]]]]]
+        let on: [String: Any] = ["data": [["storeAssertionRecords": [["assertionDetails": ["assertionDetailsModeIdentifier": "com.apple.focus.work"]]]]]]
+        let off: [String: Any] = ["data": [["storeAssertionRecords": [] as [Any]]]]
+        XCTAssertEqual(FocusStatus.active(assertions: on, modes: modes), ["Work"])
+        XCTAssertEqual(FocusStatus.active(assertions: off, modes: modes), [])
+        XCTAssertEqual(FocusStatus.active(assertions: on, modes: nil), ["work"])
+    }
+
     func testClip() {
         XCTAssertNil(Text.clip(nil, 10))
         XCTAssertEqual(Text.clip("a  b\nc", 10), "a b c")

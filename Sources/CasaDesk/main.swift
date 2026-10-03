@@ -6,7 +6,7 @@ import CasaDeskCore
 // Casa Desk — a local, READ-ONLY Apple toolkit for assistants (v1, 2026-10-03).
 //
 // ⛔ READ-ONLY BY CONSTRUCTION. There is no code path that creates, changes or deletes anything: no EKEventStore.save,
-//    no CNSaveRequest, no Notes writes, no sends. v2 writes go behind explicit flags (docs/ROADMAP.md).
+//    no CNSaveRequest, no Notes/Mail writes, no sends, no Shortcuts runs. Never UI scripting (no System Events).
 // ⛔ LOCAL ONLY. Nothing here opens a network connection. Output goes to stdout for the assistant that ran it.
 // ⛔ Times are America/Los_Angeles.
 
@@ -25,9 +25,10 @@ struct Out {
         exit(0)
     }
 
-    static func fail(_ error: String, _ hint: String, code: Int32 = 1) -> Never {
+    static func fail(_ error: String, _ hint: String, code: Int32 = 1, extra: [String: Any] = [:]) -> Never {
         if json {
-            let data = (try? JSONSerialization.data(withJSONObject: ["error": error, "hint": hint], options: [.sortedKeys])) ?? Data()
+            var obj: [String: Any] = extra; obj["error"] = error; obj["hint"] = hint
+            let data = (try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
             FileHandle.standardOutput.write(data); FileHandle.standardOutput.write(Data("\n".utf8))
         } else {
             FileHandle.standardError.write(Data("error: \(error)\nhint: \(hint)\n".utf8))
@@ -47,14 +48,21 @@ struct Args {
 
     init(_ raw: [String]) {
         var i = 0
-        let valued: Set<String> = ["--from", "--to", "--calendar", "--q", "--list", "--due-by", "--id", "--limit",
-                                    "--who", "--since", "--until", "--grep", "--search"]
+        // Every --option takes a value except these switches. `--opt=value` also works (for values starting with "--").
+        let switches: Set<String> = ["--json", "--request", "--help", "--groups", "--include-completed",
+                                     "--name-only"]
         while i < raw.count {
             let a = raw[i]
-            if valued.contains(a), i + 1 < raw.count { options[a] = raw[i + 1]; i += 2; continue }
+            if a.hasPrefix("--"), let eq = a.firstIndex(of: "=") { options[String(a[..<eq])] = String(a[a.index(after: eq)...]); i += 1; continue }
+            if a.hasPrefix("--"), !switches.contains(a), i + 1 < raw.count { options[a] = raw[i + 1]; i += 2; continue }
             if a.hasPrefix("--") { flags.insert(a); i += 1; continue }
             positional.append(a); i += 1
         }
+    }
+
+    func need(_ key: String, _ hint: String) -> String {
+        guard let v = options[key], !v.trimmingCharacters(in: .whitespaces).isEmpty else { Out.fail("missing \(key)", hint, code: 2) }
+        return v
     }
 
     var limit: Int { max(1, min(500, Int(options["--limit"] ?? "") ?? 50)) }
@@ -110,19 +118,26 @@ func doctor(_ a: Args) async -> Never {
         "contacts": contactsStatus(),
         "notes": "asks on first use (Automation → Notes)",
         "messages": messagesStatus(),
+        "mail": "asks on first use (Automation → Mail)",
+        "shortcuts": "list only (no permission needed)",
+        "focus": focusAccess(),
+        "safari": safariAccess(),
+        "icloudDrive": FileManager.default.fileExists(atPath: iCloudRoot) ? "available" : "not set up on this Mac",
         "readOnly": true,
-        "version": "0.1.0",
+        "version": "0.2.0",
     ]
     Out.emit(report) {
-        ["casa-desk 0.1.0 (read-only)",
+        ["casa-desk 0.2.0",
          "calendar:  \(report["calendar"]!)", "reminders: \(report["reminders"]!)", "contacts:  \(report["contacts"]!)",
-         "notes:     \(report["notes"]!)", "messages:  \(report["messages"]!)"].joined(separator: "\n")
+         "notes:     \(report["notes"]!)", "messages:  \(report["messages"]!)", "mail:      \(report["mail"]!)",
+         "focus:     \(report["focus"]!)", "safari:    \(report["safari"]!)", "icloud:    \(report["icloudDrive"]!)",
+         "read-only: yes"].joined(separator: "\n")
     }
 }
 
 func eventDict(_ e: EKEvent) -> [String: Any] {
     var d: [String: Any] = [
-        "title": e.title ?? "", "start": LA.iso(e.startDate), "end": LA.iso(e.endDate),
+        "id": e.eventIdentifier ?? "", "title": e.title ?? "", "start": LA.iso(e.startDate), "end": LA.iso(e.endDate),
         "allDay": e.isAllDay, "calendar": e.calendar?.title ?? "",
     ]
     if let l = e.location, !l.isEmpty { d["location"] = l }
@@ -185,7 +200,7 @@ func reminders(_ a: Args) async -> Never {
     let items: [[String: Any]] = await withCheckedContinuation { cont in
         store.fetchReminders(matching: predicate) { rs in
             let rows = (rs ?? []).map { r -> [String: Any] in
-                var d: [String: Any] = ["title": r.title ?? "", "list": r.calendar?.title ?? "", "completed": r.isCompleted,
+                var d: [String: Any] = ["id": r.calendarItemIdentifier, "title": r.title ?? "", "list": r.calendar?.title ?? "", "completed": r.isCompleted,
                                         "priority": r.priority]
                 if let dc = r.dueDateComponents, let due = LA.calendar.date(from: dc) {
                     d["due"] = dc.hour == nil ? LA.dayString(due) : LA.iso(due)
@@ -329,7 +344,7 @@ func notes(_ a: Args) -> Never {
 // MARK: - Main
 
 let usage = """
-casa-desk 0.1.0 — read-only Apple data for your assistants (local only)
+casa-desk 0.2.0 — read-only Apple data for your assistants (local only, never UI scripting)
 
   casa-desk doctor [--request]
   casa-desk calendar list   [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--calendar NAME]
@@ -342,8 +357,19 @@ casa-desk 0.1.0 — read-only Apple data for your assistants (local only)
   casa-desk notes show      --id ID
   casa-desk messages search --who NAME|NUMBER|EMAIL [--since --until --grep --groups]
   casa-desk messages search --search TEXT [--since --until]
+  casa-desk messages chats  [--q NAME]       (conversations with their chatGuid)
+  casa-desk mail list       [--mailbox NAME] [--account NAME]
+  casa-desk mail search     --q TEXT          (subject and sender)
+  casa-desk mail read       --id ID [--mailbox NAME]
+  casa-desk shortcuts list  [--q TEXT]
+  casa-desk icloud list     [--path DIR]
+  casa-desk icloud read     --path FILE       (text, downloaded files only)
+  casa-desk spotlight search --q TEXT [--in DIR] [--name-only]
+  casa-desk focus status
+  casa-desk safari bookmarks [--q TEXT]
+  casa-desk safari reading-list [--q TEXT]
 
-  --json for JSON, --limit N (default 50). Nothing here writes, deletes or sends.
+  --json for JSON, --limit N (default 50). Nothing here writes, deletes, sends or runs anything.
 """
 
 let args = Args(Array(CommandLine.arguments.dropFirst()))
@@ -355,6 +381,12 @@ case "reminders": await reminders(args)
 case "contacts": contacts(args)
 case "notes": notes(args)
 case "messages": messages(args)
+case "mail": mail(args)
+case "shortcuts": shortcuts(args)
+case "icloud": icloud(args)
+case "spotlight": spotlight(args)
+case "focus": focus(args)
+case "safari": safari(args)
 case "help", nil: print(usage); exit(0)
 default: Out.fail("unknown command \(args.positional.first!)", "Run casa-desk help.", code: 2)
 }
