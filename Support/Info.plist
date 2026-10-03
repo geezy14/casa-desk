@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>local.casa-desk</string>
+	<key>CFBundleName</key>
+	<string>casa-desk</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>casa-desk reads your calendar so your assistants can answer questions about your schedule. It never changes or deletes events.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>casa-desk reads your reminders so your assistants can tell you what is due. It never changes or deletes reminders.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>casa-desk looks people up in your contacts so your assistants know who is who. It never changes or deletes contacts.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>casa-desk reads your notes through the Notes app. It never changes or deletes notes.</string>
+</dict>
+</plist>
