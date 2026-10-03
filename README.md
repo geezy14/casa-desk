@@ -26,7 +26,7 @@ It only reads. It runs on your Mac and nothing gets uploaded anywhere.
 You need a Mac on macOS 14 (Sonoma) or newer, plus Apple's free developer tools. If you don't have them, run `xcode-select --install` once.
 
 ```bash
-git clone <this repo> ~/Developer/casa-desk
+git clone https://github.com/geezy14/casa-desk.git ~/Developer/casa-desk
 ~/Developer/casa-desk/scripts/install.sh
 ```
 
