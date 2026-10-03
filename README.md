@@ -1,6 +1,6 @@
 # Casa Desk
 
-Casa Desk lets your AI assistant (Grok Bot, Claude, or anything that speaks MCP) **look things up** in the Apple apps on your Mac: your calendar, reminders, contacts, notes and Messages history.
+Casa Desk lets your AI assistant (Grok Bot, Claude, or anything that speaks MCP) **look things up** in the Apple apps on your Mac: calendar, reminders, contacts, notes, Messages history, Mail, iCloud Drive, Spotlight, Focus, Safari bookmarks and Reading List, and the names of your Shortcuts.
 
 It only reads. It runs on your Mac and nothing gets uploaded anywhere.
 
@@ -13,11 +13,18 @@ It only reads. It runs on your Mac and nothing gets uploaded anywhere.
 | "What's Sam's number?" | Contacts |
 | "Find my note about the Wi-Fi password" | Notes |
 | "What did Alex text me about dinner?" | Messages |
+| "Did the landlord email back?" | Mail |
+| "What's in my iCloud Drive Taxes folder?" | iCloud Drive |
+| "Find my lease PDF" | Spotlight (file paths only) |
+| "Am I in a Focus right now?" | Focus |
+| "What's on my Reading List?" | Safari |
 
 ## What it never does
 
 - **Never changes anything.** No new events, no edited contacts, no deleted notes. The code has no write paths at all.
 - **Never sends anything.** No texts, no emails, no invites.
+- **Never clicks or types for you.** No System Events and no UI scripting. Casa Desk only uses each app's own data or scripting dictionary.
+- **Never runs your Shortcuts**, and never downloads iCloud files that are stored only in the cloud.
 - **Never deletes anything.**
 - **Never goes online.** It reads files and apps on this Mac and prints the answer to the assistant that asked. That's it.
 
@@ -41,7 +48,8 @@ macOS asks you before any app reads your stuff. Casa Desk can't click these for 
 1. **Calendar, Reminders and Contacts.** Run `casa-desk doctor --request` and click **Allow** on each popup.
    Missed one? Go to System Settings → Privacy & Security → Calendars (or Reminders, or Contacts) and switch it on there.
 2. **Messages (optional).** Messages history lives in a protected file. Open System Settings → Privacy & Security → **Full Disk Access** and turn on the app that runs Casa Desk: Terminal, or your assistant's app. Skip this if you don't want your assistant reading texts.
-3. **Notes.** The first time something searches your notes, macOS asks to let that app control Notes. Click **OK**.
+3. **Notes and Mail.** The first time something searches your notes or mail, macOS asks to let that app control Notes (or Mail). Click **OK**.
+4. **Focus and Safari** use Full Disk Access too, the same switch as Messages.
 
 To see what's allowed right now, run `casa-desk doctor`. That command never pops anything up.
 
@@ -62,6 +70,11 @@ casa-desk contacts search --q sam
 casa-desk notes search --q wifi
 casa-desk messages search --who "Alex" --since 2026-09-01
 casa-desk messages search --search "dinner" --since 2026-09-01
+casa-desk mail search --q invoice
+casa-desk icloud list --path Documents
+casa-desk spotlight search --q lease --in ~/Documents
+casa-desk focus status
+casa-desk safari reading-list
 ```
 
 Every command accepts `--json` and `--limit N` (the default is 50). Run `casa-desk help` for the full list. Times are shown in Pacific time (America/Los_Angeles).

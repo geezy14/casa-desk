@@ -1,11 +1,11 @@
 ---
 name: Casa Desk
-description: Read-only lookups in the user's Apple Calendar, Reminders, Contacts, Notes and iMessage/SMS history on their own Mac, through the local `casa-desk` tool. Use it when the user asks about their schedule, to-dos, a person's details, a note, or what someone texted. It is NOT a cloud connector, NOT Google, and it never sends, changes or deletes anything. It has no access to Passwords, HomeKit or Photos.
+description: Read-only lookups in the user's Apple Calendar, Reminders, Contacts, Notes, iMessage/SMS history, Mail, iCloud Drive, Spotlight, Focus status, Safari bookmarks/Reading List and Shortcuts names on their own Mac, through the local `casa-desk` tool. Use it when the user asks about their schedule, to-dos, a person, a note, a text, an email, a file, or their Focus. It is NOT a cloud connector, NOT Google, never uses System Events/UI scripting, and never sends, changes, deletes or runs anything. It has no access to Passwords, HomeKit or Photos.
 ---
 
 # Casa Desk
 
-`casa-desk` is a small command-line tool that runs on the user's Mac. It reads Apple's Calendar, Reminders, Contacts, Notes and Messages there and prints JSON.
+`casa-desk` is a small command-line tool that runs on the user's Mac. It reads Apple's Calendar, Reminders, Contacts, Notes, Messages, Mail, iCloud Drive, Spotlight, Focus and Safari there and prints JSON.
 
 ## Where to run it
 
@@ -39,17 +39,18 @@ For usage, run `casa-desk --help`. Every command accepts `--json` (always use it
 2. Pick the **first** item that isn't `granted` and give the person the matching step:
    - **calendar / reminders / contacts:** "Open Terminal and run `casa-desk doctor --request`, then click Allow." If they already clicked Don't Allow, the fix is System Settings → Privacy & Security → Calendars (or Reminders, or Contacts) → turn on Terminal.
    - **messages** (optional, so ask first): System Settings → Privacy & Security → Full Disk Access → turn on the app that runs casa-desk.
-   - **notes:** the first `casa-desk notes search` asks "allow … to control Notes?" Click OK.
+   - **notes / mail:** the first `casa-desk notes search` (or `mail list`) asks "allow … to control Notes/Mail?" Click OK.
+   - **focus / safari:** same Full Disk Access switch as messages.
 3. **Wait** for the person to say they're done, then run `casa-desk doctor --json` again and move to the next item.
 4. If they decline or don't answer, **stop**. Don't nag, retry in a loop, or keep checking while they're away. Casa Desk works with whatever has been allowed.
 
 ## Security tip for the person
 
-If your own app has macOS **Automation** or **Accessibility** control over Terminal, System Events, Messages or Mail (System Settings → Privacy & Security → Automation / Accessibility), suggest they turn those off. With Casa Desk you can read what you need through read-only paths, so nothing can send or delete by accident or because a message tricked you. Explain this once and let them decide.
+Casa Desk never uses System Events. If your own app has **System Events** turned on under System Settings → Privacy & Security → Automation (or broad **Accessibility** control), suggest they turn it off. That's the switch that lets an app click and type anywhere. Casa Desk's Notes and Mail switches can stay on, because it uses them read-only. Explain this once and let them decide.
 
 ## When not to use it
 
 - Anything in Google, Outlook or other cloud accounts that aren't synced into the Apple apps on this Mac.
-- Sending, replying, scheduling, creating reminders, or editing anything (this is v1, read-only).
-- Passwords, keychain, HomeKit, Photos, Health, files, or browser data.
+- Sending, replying, drafting, scheduling, creating reminders, editing anything, or running a Shortcut (this version is read-only).
+- Passwords, keychain, HomeKit, Photos, Health, browser history or cookies. Spotlight returns file paths only, never inside Keychains, Messages, Mail stores or cookies.
 - When the person hasn't asked about their own Apple data. Don't browse it just because you can.
