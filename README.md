@@ -1,8 +1,8 @@
 # Casa Desk
 
-Casa Desk lets your AI assistant (Grok Bot, Claude, or anything that speaks MCP) **look things up** in the Apple apps on your Mac: calendar, reminders, contacts, notes, Messages history, Mail, iCloud Drive, Spotlight, Focus, Safari bookmarks and Reading List, and the names of your Shortcuts.
+Casa Desk lets your AI assistant (Grok Bot, Claude, or anything that speaks MCP) **look things up and get things done** in the Apple apps on your Mac: calendar, reminders, contacts, notes, Messages, Mail, iCloud Drive, Spotlight, Focus, Safari bookmarks and Reading List, and your Shortcuts.
 
-It only reads. It runs on your Mac and nothing gets uploaded anywhere.
+It runs on your Mac and nothing gets uploaded anywhere. Every change is shown to you first and only happens after you say yes.
 
 ## What it does
 
@@ -19,14 +19,31 @@ It only reads. It runs on your Mac and nothing gets uploaded anywhere.
 | "Am I in a Focus right now?" | Focus |
 | "What's on my Reading List?" | Safari |
 
+| Ask your assistant… | Casa Desk does (after your yes) |
+|---|---|
+| "Remind me to call the dentist Monday at 5" | adds a reminder |
+| "Move my 3pm to 4" / "cancel lunch Friday" | updates or cancels an event |
+| "Save Sam's new number" | adds or updates a contact |
+| "Start a note with the gate code" | creates or appends to a note |
+| "Text Alex I'm running late" | sends that exact iMessage/SMS |
+| "Draft a reply to the landlord" | opens a draft in Mail for you to send |
+| "Run my Good Night shortcut" | runs a Shortcut |
+
+## How changes work
+
+Every change is a **dry run first**. Your assistant shows you exactly what would happen (the event, the reminder, the exact text and who it goes to). Nothing changes until you say yes and the assistant runs it again with `--force`.
+
+Sends (Messages, Mail) have two more locks:
+- **A confirm code.** The dry run prints a short code tied to the exact recipient and text. The send only goes out with that code, so if one character changes, it's refused and you're asked again.
+- **Once.** Each approved message sends one time. A repeat is refused unless you ask for it again.
+- **Optional allowlist.** Put phone numbers, emails or group chat ids (one per line) in `~/.config/casa-desk/allowlist`, and Casa Desk will only send to those. No file means no allowlist.
+
 ## What it never does
 
-- **Never changes anything.** No new events, no edited contacts, no deleted notes. The code has no write paths at all.
-- **Never sends anything.** No texts, no emails, no invites.
-- **Never clicks or types for you.** No System Events and no UI scripting. Casa Desk only uses each app's own data or scripting dictionary.
-- **Never runs your Shortcuts**, and never downloads iCloud files that are stored only in the cloud.
-- **Never deletes anything.**
-- **Never goes online.** It reads files and apps on this Mac and prints the answer to the assistant that asked. That's it.
+- **Never clicks or types for you.** No System Events and no UI scripting. Casa Desk only uses each app's own data, Apple's frameworks, or the app's scripting dictionary.
+- **Never deletes**, with one exception: `calendar delete` with an event id, after your yes. Reminders get completed, events get marked canceled, contacts only gain fields, notes only get added to.
+- **Never marks messages read** and never downloads iCloud files that are stored only in the cloud.
+- **Never goes online.** It reads and changes things on this Mac and prints the answer to the assistant that asked. A local log of what changed (time, action, target; never message text) is kept in `~/Library/Logs/casa-desk/actions.jsonl`.
 
 ## Install
 
@@ -48,7 +65,7 @@ macOS asks you before any app reads your stuff. Casa Desk can't click these for 
 1. **Calendar, Reminders and Contacts.** Run `casa-desk doctor --request` and click **Allow** on each popup.
    Missed one? Go to System Settings → Privacy & Security → Calendars (or Reminders, or Contacts) and switch it on there.
 2. **Messages (optional).** Messages history lives in a protected file. Open System Settings → Privacy & Security → **Full Disk Access** and turn on the app that runs Casa Desk: Terminal, or your assistant's app. Skip this if you don't want your assistant reading texts.
-3. **Notes and Mail.** The first time something searches your notes or mail, macOS asks to let that app control Notes (or Mail). Click **OK**.
+3. **Notes, Mail and Messages.** The first time something uses Notes or Mail (or sends a message), macOS asks to let that app control Notes, Mail or Messages. Click **OK**. That's the app's own scripting, not System Events.
 4. **Focus and Safari** use Full Disk Access too, the same switch as Messages.
 
 To see what's allowed right now, run `casa-desk doctor`. That command never pops anything up.
@@ -77,16 +94,28 @@ casa-desk focus status
 casa-desk safari reading-list
 ```
 
-Every command accepts `--json` and `--limit N` (the default is 50). Run `casa-desk help` for the full list. Times are shown in Pacific time (America/Los_Angeles).
+Changes (each one prints a dry run; add `--force` after your yes):
+```bash
+casa-desk reminders add --title "Call the dentist" --due 2026-10-05T17:00
+casa-desk calendar create --title "Lunch" --start 2026-10-09T12:30 --minutes 60
+casa-desk calendar cancel --id EVENT_ID
+casa-desk contacts edit --id CONTACT_ID --add-phone "323-555-0100"
+casa-desk notes create --title "Gate code" --body "4512"
+casa-desk messages send --to "Alex" --text "Running 10 late"     # then: --force --confirm CODE
+casa-desk mail draft --to landlord@example.com --subject "Lease" --body "Hi…"
+casa-desk shortcuts run --name "Good Night"
+```
+
+Every command accepts `--json` and `--limit N` (the default is 50). Run `casa-desk help` for the full list. Times are Pacific time (America/Los_Angeles).
 
 ## Settings
 
-None are needed. Per-person settings will live in `~/.config/casa-desk/` if any are ever added.
+None are needed. The only one is the optional send allowlist, `~/.config/casa-desk/allowlist`. You edit it, not your assistant.
 
 ## Privacy
 
-Casa Desk only answers the assistant that runs it, on your Mac. What that assistant does with the answer is up to the assistant. Turn on only the permissions you're comfortable with.
+Casa Desk only answers the assistant that runs it, on your Mac. What that assistant does with the answer is up to the assistant. Turn on only the permissions you're comfortable with, and keep the allowlist on if you want sends limited to a few people.
 
 ## License
 
-License: TBD (Geezy).
+MIT. See [LICENSE](LICENSE).

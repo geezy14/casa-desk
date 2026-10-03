@@ -9,14 +9,14 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>0.3.0</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>casa-desk reads your calendar so your assistants can answer questions about your schedule. It never changes or deletes events.</string>
+	<string>casa-desk reads your calendar so your assistants can answer questions about your schedule, and adds or changes events only when you approve it.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
-	<string>casa-desk reads your reminders so your assistants can tell you what is due. It never changes or deletes reminders.</string>
+	<string>casa-desk reads your reminders so your assistants can tell you what is due, and adds or completes them only when you approve it.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>casa-desk looks people up in your contacts so your assistants know who is who. It never changes or deletes contacts.</string>
+	<string>casa-desk looks people up in your contacts so your assistants know who is who, and adds or updates a contact only when you approve it. It never deletes contacts.</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>casa-desk reads your notes through the Notes app. It never changes or deletes notes.</string>
+	<string>casa-desk works with Notes, Mail and Messages through their own scripting, only when you ask. Sends need your approval of the exact text.</string>
 </dict>
 </plist>

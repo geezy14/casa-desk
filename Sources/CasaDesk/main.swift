@@ -3,10 +3,10 @@ import EventKit
 import Contacts
 import CasaDeskCore
 
-// Casa Desk — a local, READ-ONLY Apple toolkit for assistants (v1, 2026-10-03).
+// Casa Desk — a local Apple toolkit for assistants (v1 read-only 2026-10-03; v2 writes + sends 2026-10-03).
 //
-// ⛔ READ-ONLY BY CONSTRUCTION. There is no code path that creates, changes or deletes anything: no EKEventStore.save,
-//    no CNSaveRequest, no Notes/Mail writes, no sends, no Shortcuts runs. Never UI scripting (no System Events).
+// ⛔ Reads live here and in Messages.swift / Extras.swift. Every write or send lives in Writes.swift, behind one gate:
+//    a dry run unless --force, and sends also need the dry run's --confirm code. Never UI scripting (no System Events).
 // ⛔ LOCAL ONLY. Nothing here opens a network connection. Output goes to stdout for the assistant that ran it.
 // ⛔ Times are America/Los_Angeles.
 
@@ -50,7 +50,7 @@ struct Args {
         var i = 0
         // Every --option takes a value except these switches. `--opt=value` also works (for values starting with "--").
         let switches: Set<String> = ["--json", "--request", "--help", "--groups", "--include-completed",
-                                     "--name-only"]
+                                     "--name-only", "--dry-run", "--force", "--all-day", "--clear-due", "--again"]
         while i < raw.count {
             let a = raw[i]
             if a.hasPrefix("--"), let eq = a.firstIndex(of: "=") { options[String(a[..<eq])] = String(a[a.index(after: eq)...]); i += 1; continue }
@@ -123,15 +123,16 @@ func doctor(_ a: Args) async -> Never {
         "focus": focusAccess(),
         "safari": safariAccess(),
         "icloudDrive": FileManager.default.fileExists(atPath: iCloudRoot) ? "available" : "not set up on this Mac",
-        "readOnly": true,
-        "version": "0.2.0",
+        "writes": "dry run unless --force; sends also need --confirm CODE",
+        "allowlist": loadAllowlist().isActive ? "on (\(loadAllowlist().entries.count) entries)" : "off",
+        "version": "0.3.0",
     ]
     Out.emit(report) {
-        ["casa-desk 0.2.0",
+        ["casa-desk 0.3.0",
          "calendar:  \(report["calendar"]!)", "reminders: \(report["reminders"]!)", "contacts:  \(report["contacts"]!)",
          "notes:     \(report["notes"]!)", "messages:  \(report["messages"]!)", "mail:      \(report["mail"]!)",
          "focus:     \(report["focus"]!)", "safari:    \(report["safari"]!)", "icloud:    \(report["icloudDrive"]!)",
-         "read-only: yes"].joined(separator: "\n")
+         "writes:    \(report["writes"]!)", "allowlist: \(report["allowlist"]!)"].joined(separator: "\n")
     }
 }
 
@@ -344,7 +345,9 @@ func notes(_ a: Args) -> Never {
 // MARK: - Main
 
 let usage = """
-casa-desk 0.2.0 — read-only Apple data for your assistants (local only, never UI scripting)
+casa-desk 0.3.0 — Apple data for your assistants (local only, never UI scripting)
+
+READ
 
   casa-desk doctor [--request]
   casa-desk calendar list   [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--calendar NAME]
@@ -369,11 +372,33 @@ casa-desk 0.2.0 — read-only Apple data for your assistants (local only, never 
   casa-desk safari bookmarks [--q TEXT]
   casa-desk safari reading-list [--q TEXT]
 
-  --json for JSON, --limit N (default 50). Nothing here writes, deletes, sends or runs anything.
+WRITE (a dry run unless --force; show the person, then re-run with --force after their yes)
+  casa-desk reminders add      --title T [--list NAME] [--due YYYY-MM-DD[THH:MM]] [--notes N] [--priority high|medium|low]
+  casa-desk reminders complete --id ID
+  casa-desk reminders edit     --id ID [--title] [--due | --clear-due] [--notes] [--priority] [--list]
+  casa-desk calendar create    --title T --start YYYY-MM-DDTHH:MM [--end … | --minutes N] [--calendar] [--location] [--notes]
+  casa-desk calendar create    --title T --start YYYY-MM-DD [--end YYYY-MM-DD] --all-day
+  casa-desk calendar update    --id ID [--title] [--start] [--end | --minutes] [--location] [--notes] [--calendar]
+  casa-desk calendar cancel    --id ID                (kept, title marked "Canceled: ")
+  casa-desk calendar delete    --id ID                (the only delete; --force + id)
+  casa-desk contacts add       --first F [--last L] [--nickname] [--org] [--phone P] [--email E]
+  casa-desk contacts edit      --id ID [--first] [--last] [--nickname] [--org] [--add-phone P] [--add-email E]
+  casa-desk notes create       --title T [--body B] [--folder NAME]
+  casa-desk notes append       --id ID --text T
+  casa-desk mail draft         --to A[,B] --subject S [--body B] [--cc …] [--from ADDR]   (opens in Mail)
+  casa-desk shortcuts run      --name NAME [--input TEXT]
+
+SEND (dry run prints a confirm code; send = --force --confirm CODE; each code sends once)
+  casa-desk messages send      --to NAME|NUMBER|EMAIL --text T [--service imessage|sms]
+  casa-desk messages send      --chat-guid GUID --text T      (group chats, guid from messages chats)
+  casa-desk mail send          --to A[,B] --subject S [--body B] [--cc …] [--from ADDR]
+
+  --json for JSON, --limit N (default 50). Optional send allowlist: ~/.config/casa-desk/allowlist.
 """
 
 let args = Args(Array(CommandLine.arguments.dropFirst()))
 Out.json = args.flags.contains("--json")
+await routeWrite(args)
 switch args.positional.first {
 case "doctor": await doctor(args)
 case "calendar": await calendar(args)

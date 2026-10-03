@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Stdio test for the Casa Desk MCP server: initialize, tools/list, and an argument-check call.
+"""Stdio test for the Casa Desk MCP server: initialize, tools/list, argument checks, and the write gate.
 
-Needs no permissions and reads no personal data. Run: python3 Tests/test_mcp.py
+Needs no permissions and reads no personal data. Never sends: the send tests use a fake 555 number and stop at the gate. Run: python3 Tests/test_mcp.py
 """
 import json
 import os
@@ -14,6 +14,9 @@ EXPECTED = {"doctor", "calendar_list", "calendar_search", "reminders_lists", "re
             "contacts_show", "notes_search", "notes_show", "messages_search", "messages_chats", "mail_list", "mail_search",
             "mail_read", "shortcuts_list", "icloud_list", "icloud_read", "spotlight_search", "focus_status",
             "safari_bookmarks", "safari_reading_list"}
+WRITES = {"reminders_add", "reminders_complete", "reminders_edit", "calendar_create", "calendar_update", "calendar_cancel",
+          "calendar_delete", "contacts_add", "contacts_edit", "notes_create", "notes_append", "mail_draft", "shortcuts_run",
+          "messages_send", "mail_send"}
 
 
 def session(messages):
@@ -36,11 +39,34 @@ class MCPTest(unittest.TestCase):
         self.assertEqual(init["result"]["serverInfo"]["name"], "casa-desk")
         self.assertIn("tools", init["result"]["capabilities"])
         tools = listed["result"]["tools"]
-        self.assertEqual({t["name"] for t in tools}, EXPECTED)
+        self.assertEqual({t["name"] for t in tools}, EXPECTED | WRITES)
         for t in tools:
-            self.assertTrue(t["annotations"]["readOnlyHint"], t["name"])
-            self.assertFalse(t["annotations"]["destructiveHint"], t["name"])
             self.assertEqual(t["inputSchema"]["type"], "object")
+            if t["name"] in EXPECTED:
+                self.assertTrue(t["annotations"]["readOnlyHint"], t["name"])
+                self.assertFalse(t["annotations"]["destructiveHint"], t["name"])
+            else:
+                self.assertFalse(t["annotations"]["readOnlyHint"], t["name"])
+                self.assertIn("confirm", t["inputSchema"]["properties"], t["name"])
+
+    def test_send_without_confirm_is_a_dry_run(self):
+        # A fake 555 number; without confirm the server adds --dry-run, so nothing can be sent.
+        (reply,) = session([{"jsonrpc": "2.0", "id": 4, "method": "tools/call",
+                             "params": {"name": "messages_send", "arguments": {"to": "323-555-0100", "text": "test only"}}}])
+        out = json.loads(reply["result"]["content"][0]["text"])
+        if "error" in out and "binary not found" in out["error"]:
+            self.skipTest("casa-desk not built")
+        self.assertTrue(out["dryRun"])
+        self.assertEqual(len(out["confirmCode"]), 8)
+
+    def test_confirm_without_code_is_refused(self):
+        (reply,) = session([{"jsonrpc": "2.0", "id": 5, "method": "tools/call",
+                             "params": {"name": "messages_send", "arguments": {"to": "323-555-0100", "text": "test only", "confirm": True}}}])
+        out = json.loads(reply["result"]["content"][0]["text"])
+        if "error" in out and "binary not found" in out["error"]:
+            self.skipTest("casa-desk not built")
+        self.assertTrue(reply["result"]["isError"])
+        self.assertIn("--confirm", out["error"])
 
     def test_missing_argument_is_an_error_not_a_crash(self):
         (reply,) = session([{"jsonrpc": "2.0", "id": 3, "method": "tools/call",

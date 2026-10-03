@@ -2,7 +2,8 @@ import Foundation
 import CasaDeskCore
 
 // Read-only extras: Mail, Shortcuts (list), iCloud Drive, Spotlight, Focus, Safari.
-// ⛔ Nothing here writes, sends, runs a shortcut, or downloads an evicted iCloud file. No System Events.
+// ⛔ Nothing in THIS file writes, sends, runs a shortcut, or downloads an evicted iCloud file (Mail draft/send and
+//    Shortcuts run live in Writes.swift, behind the --force gate). No System Events.
 
 let home = NSHomeDirectory()
 let iCloudRoot = home + "/Library/Mobile Documents/com~apple~CloudDocs"
@@ -133,7 +134,7 @@ func spotlight(_ a: Args) -> Never {
 
 func shortcuts(_ a: Args) -> Never {
     let sub = a.positional.dropFirst().first ?? "list"
-    guard sub == "list" else { Out.fail("unknown shortcuts command \(sub)", "Casa Desk lists shortcuts; it doesn't run them.", code: 2) }
+    guard sub == "list" else { Out.fail("unknown shortcuts command \(sub)", "Use: shortcuts list | shortcuts run --name NAME", code: 2) }
     let (status, out, err) = runProcess("/usr/bin/shortcuts", ["list"], timeout: 30)
     guard status == 0 else { Out.fail("couldn't list shortcuts", err.trimmingCharacters(in: .whitespacesAndNewlines), code: 5) }
     var names = out.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
@@ -197,7 +198,7 @@ func mail(_ a: Args) -> Never {
         let id = a.need("--id", "Get the id from mail list or mail search.")
         guard Int(id) != nil else { Out.fail("bad --id", "Mail ids are numbers from mail list/search.", code: 2) }
         payload["id"] = id
-    default: Out.fail("unknown mail command \(sub)", "Use: mail list | search | read (Casa Desk doesn't send or draft)", code: 2)
+    default: Out.fail("unknown mail command \(sub)", "Use: mail list | search | read | draft | send", code: 2)
     }
     let arg = String(data: try! JSONSerialization.data(withJSONObject: payload), encoding: .utf8)!
     let (status, out, err) = runProcess("/usr/bin/osascript", ["-l", "JavaScript", "-e", mailJXA, arg], timeout: 120)
