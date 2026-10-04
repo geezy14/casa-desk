@@ -34,5 +34,6 @@ Never run `casa-desk doctor --request` from an agent session — it pops permiss
 - `Sources/CasaDesk/Messages.swift` — native read-only chat.db reader (search + chats); handle→name via Contacts.
 - `Sources/CasaDesk/Extras.swift` — Mail (JXA), Shortcuts list, iCloud Drive, Spotlight, Focus, Safari (reads).
 - `Sources/CasaDesk/Writes.swift` — every write and send, the gate, the send-once ledger, the action log.
+- `Sources/CasaDesk/AppRelay.swift` — with `~/Applications/Casa Desk.app` installed (install.sh builds + signs it), the CLI re-runs itself inside that app via `open -W --stdout/--stderr --env … --args`, so TCC charges "Casa Desk", not the caller (Grok Bot's helper can't show prompts). Every exit goes through `Relay.finish` so the exit code reaches the caller. `CASA_DESK_DIRECT=1` skips the relay.
 - `mcp/casa-desk-mcp.py` — stdlib MCP stdio server; argv-only subprocess; read tools `readOnlyHint`, write tools `confirm`.
 - `SKILL.md` — instructions a bot follows to install + use Casa Desk on its own.

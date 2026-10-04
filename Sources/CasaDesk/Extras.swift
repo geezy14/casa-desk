@@ -19,7 +19,7 @@ func readJSON(_ path: String) -> [String: Any]? {
 
 func focusAccess() -> String {
     FileManager.default.isReadableFile(atPath: focusDir + "/Assertions.json") && readJSON(focusDir + "/Assertions.json") != nil
-        ? "readable" : "needs Full Disk Access for the app running casa-desk"
+        ? "readable" : "needs Full Disk Access for \(Relay.grantee)"
 }
 
 func focus(_ a: Args) -> Never {
@@ -31,7 +31,7 @@ func focus(_ a: Args) -> Never {
 // MARK: - Safari (bookmarks + Reading List)
 
 func safariAccess() -> String {
-    FileManager.default.contents(atPath: safariPlist) != nil ? "readable" : "needs Full Disk Access for the app running casa-desk"
+    FileManager.default.contents(atPath: safariPlist) != nil ? "readable" : "needs Full Disk Access for \(Relay.grantee)"
 }
 
 func safari(_ a: Args) -> Never {

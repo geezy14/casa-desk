@@ -22,7 +22,7 @@ struct Out {
         } else {
             print(human())
         }
-        exit(0)
+        Relay.finish(0)
     }
 
     static func fail(_ error: String, _ hint: String, code: Int32 = 1, extra: [String: Any] = [:]) -> Never {
@@ -33,7 +33,7 @@ struct Out {
         } else {
             FileHandle.standardError.write(Data("error: \(error)\nhint: \(hint)\n".utf8))
         }
-        exit(code)
+        Relay.finish(code)
     }
 }
 
@@ -125,10 +125,11 @@ func doctor(_ a: Args) async -> Never {
         "icloudDrive": FileManager.default.fileExists(atPath: iCloudRoot) ? "available" : "not set up on this Mac",
         "writes": "dry run unless --force; sends also need --confirm CODE",
         "allowlist": loadAllowlist().isActive ? "on (\(loadAllowlist().entries.count) entries)" : "off",
-        "version": "0.3.0",
+        "version": "0.3.1",
+        "runsAs": Relay.inApp ? "Casa Desk.app (grant permissions to Casa Desk)" : (Relay.appPath == nil ? "the calling app (Casa Desk.app not installed — run scripts/install.sh)" : "the calling app (CASA_DESK_DIRECT=1)"),
     ]
     Out.emit(report) {
-        ["casa-desk 0.3.0",
+        ["casa-desk 0.3.1  (runs as: \(report["runsAs"]!))",
          "calendar:  \(report["calendar"]!)", "reminders: \(report["reminders"]!)", "contacts:  \(report["contacts"]!)",
          "notes:     \(report["notes"]!)", "messages:  \(report["messages"]!)", "mail:      \(report["mail"]!)",
          "focus:     \(report["focus"]!)", "safari:    \(report["safari"]!)", "icloud:    \(report["icloudDrive"]!)",
@@ -345,7 +346,7 @@ func notes(_ a: Args) -> Never {
 // MARK: - Main
 
 let usage = """
-casa-desk 0.3.0 — Apple data for your assistants (local only, never UI scripting)
+casa-desk 0.3.1 — Apple data for your assistants (local only, never UI scripting)
 
 READ
 
@@ -396,6 +397,7 @@ SEND (dry run prints a confirm code; send = --force --confirm CODE; each code se
   --json for JSON, --limit N (default 50). Optional send allowlist: ~/.config/casa-desk/allowlist.
 """
 
+Relay.runThroughAppIfNeeded()      // with Casa Desk.app installed, the work runs as that app (its own permissions)
 let args = Args(Array(CommandLine.arguments.dropFirst()))
 Out.json = args.flags.contains("--json")
 await routeWrite(args)
@@ -412,6 +414,6 @@ case "icloud": icloud(args)
 case "spotlight": spotlight(args)
 case "focus": focus(args)
 case "safari": safari(args)
-case "help", nil: print(usage); exit(0)
+case "help", nil: print(usage); Relay.finish(0)
 default: Out.fail("unknown command \(args.positional.first!)", "Run casa-desk help.", code: 2)
 }

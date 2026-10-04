@@ -14,7 +14,7 @@ import shutil
 import subprocess
 import sys
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 

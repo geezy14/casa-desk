@@ -54,7 +54,7 @@ git clone https://github.com/geezy14/casa-desk.git ~/Developer/casa-desk
 ~/Developer/casa-desk/scripts/install.sh
 ```
 
-The installer builds Casa Desk and puts a `casa-desk` command in `~/.local/bin`. It doesn't use `sudo` and doesn't touch anything else. If that folder isn't on your PATH yet, the installer prints the line to add.
+The installer builds Casa Desk, puts a small **Casa Desk** app in `~/Applications` (no Dock icon, no window), and puts a `casa-desk` command in `~/.local/bin`. The command quietly runs its work through that app, so macOS permissions are granted to "Casa Desk" once and work no matter which assistant or Terminal runs it. It doesn't use `sudo` and doesn't touch anything else. If that folder isn't on your PATH yet, the installer prints the line to add.
 
 If you use Grok Bot, you can just share this folder (or [SKILL.md](SKILL.md)) with the bot. It installs everything itself and then tells you which switches to click.
 
@@ -62,9 +62,9 @@ If you use Grok Bot, you can just share this folder (or [SKILL.md](SKILL.md)) wi
 
 macOS asks you before any app reads your stuff. Casa Desk can't click these for you, and it never tries to.
 
-1. **Calendar, Reminders and Contacts.** Run `casa-desk doctor --request` and click **Allow** on each popup.
-   Missed one? Go to System Settings → Privacy & Security → Calendars (or Reminders, or Contacts) and switch it on there.
-2. **Messages (optional).** Messages history lives in a protected file. Open System Settings → Privacy & Security → **Full Disk Access** and turn on the app that runs Casa Desk: Terminal, or your assistant's app. Skip this if you don't want your assistant reading texts.
+1. **Calendar, Reminders and Contacts.** Run `casa-desk doctor --request` and click **Allow** on each popup asking about **Casa Desk**.
+   Missed one? Go to System Settings → Privacy & Security → Calendars (or Reminders, or Contacts) and switch on Casa Desk there.
+2. **Messages (optional).** Messages history lives in a protected file. Open System Settings → Privacy & Security → **Full Disk Access**, click **+**, press Cmd-Shift-G, type `~/Applications`, and choose **Casa Desk**. Skip this if you don't want your assistant reading texts.
 3. **Notes, Mail and Messages.** The first time something uses Notes or Mail (or sends a message), macOS asks to let that app control Notes, Mail or Messages. Click **OK**. That's the app's own scripting, not System Events.
 4. **Focus and Safari** use Full Disk Access too, the same switch as Messages.
 

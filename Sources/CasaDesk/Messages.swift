@@ -158,7 +158,7 @@ func messages(_ a: Args) -> Never {
 
 /// For doctor: can this process read chat.db right now?
 func messagesStatus() -> String {
-    ChatDB() != nil ? "granted (Full Disk Access)" : "needs Full Disk Access for the app running casa-desk"
+    ChatDB() != nil ? "granted (Full Disk Access)" : "needs Full Disk Access for \(Relay.grantee)"
 }
 
 /// Recent conversations (newest first) with their guid, name and people — for finding a group chat.

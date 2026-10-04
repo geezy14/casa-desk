@@ -49,7 +49,7 @@ git clone https://github.com/geezy14/casa-desk.git ~/Developer/casa-desk
 ~/Developer/casa-desk/scripts/install.sh
 ```
 
-The installer is non-interactive and doesn't use sudo. It links `casa-desk` into `~/.local/bin`; if that folder isn't on PATH, call `~/.local/bin/casa-desk` directly. If it reports that Swift is missing, ask the person to run `xcode-select --install`, click Install, and tell you when it's done. Then run the installer again.
+The installer is non-interactive and doesn't use sudo. It builds **`~/Applications/Casa Desk.app`** and links `casa-desk` into `~/.local/bin`. The command hands its work to Casa Desk.app, so every macOS permission belongs to **"Casa Desk"**, not to your app or Terminal: granted once, it works whatever runs the command. `casa-desk doctor` shows `runs as: Casa Desk.app` when that's working. The link is in `~/.local/bin`; if that folder isn't on PATH, call `~/.local/bin/casa-desk` directly. If it reports that Swift is missing, ask the person to run `xcode-select --install`, click Install, and tell you when it's done. Then run the installer again.
 
 For usage, run `casa-desk --help`. Every command accepts `--json` (always use it) and `--limit N` (the default is 50). Errors come back as `{"error", "hint"}`; pass the hint along to the person.
 
@@ -57,10 +57,11 @@ For usage, run `casa-desk --help`. Every command accepts `--json` (always use it
 
 1. Run `casa-desk doctor --json`. This never pops up a dialog.
 2. Pick the **first** item that isn't `granted` and give the person the matching step:
-   - **calendar / reminders / contacts:** "Open Terminal and run `casa-desk doctor --request`, then click Allow." If they already clicked Don't Allow, the fix is System Settings → Privacy & Security → Calendars (or Reminders, or Contacts) → turn on Terminal.
-   - **messages** (optional, so ask first): System Settings → Privacy & Security → Full Disk Access → turn on the app that runs casa-desk.
-   - **notes / mail / messages sending:** the first `casa-desk notes search` (or `mail list`, or a confirmed `messages send`) asks "allow … to control Notes/Mail/Messages?" Click OK.
-   - **focus / safari:** same Full Disk Access switch as messages.
+   - **calendar / reminders / contacts:** run `casa-desk doctor --request` yourself, and tell the person: "macOS is asking whether **Casa Desk** can use your Calendars, Reminders and Contacts — click Allow on each." If they already clicked Don't Allow, the fix is System Settings → Privacy & Security → Calendars (or Reminders, or Contacts) → turn on Casa Desk.
+   - **messages** (optional, so ask first): System Settings → Privacy & Security → Full Disk Access → click **+**, press Cmd-Shift-G, type `~/Applications`, choose **Casa Desk**.
+   - **notes / mail / messages sending:** the first `casa-desk notes search` (or `mail list`, or a confirmed `messages send`) asks "allow Casa Desk to control Notes/Mail/Messages?" Click OK.
+   - **focus / safari:** same Full Disk Access switch as messages (Casa Desk).
+   - If `doctor` says `runs as: the calling app`, Casa Desk.app isn't installed: run the installer again. If a command fails with "couldn't start Casa Desk.app", tell the person what it said.
 3. **Wait** for the person to say they're done, then run `casa-desk doctor --json` again and move to the next item.
 4. If they decline or don't answer, **stop**. Don't nag, retry in a loop, or keep checking while they're away. Casa Desk works with whatever has been allowed.
 
