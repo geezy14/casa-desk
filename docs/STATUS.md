@@ -1,5 +1,10 @@
 # Casa Desk status
 
+## 2026-10-04 — 0.3.2: Messages send fixed for macOS 27
+- Reported from Grok Bot: a 1:1 send failed at `Messages.accounts.whose({serviceType})`. Root causes (probed read-only on macOS 27): `Application('Messages')` resolved to "Messages Assistant Extension", and on the real app reading `service type` fails ("AppleEvent handler failed").
+- Fix: every app is addressed by bundle id (com.apple.MobileSMS, com.apple.Notes, com.apple.mail). Sends go to the existing conversation by its chat id (from chat.db, e.g. `any;-;+1…`), falling back to a Messages participant by handle; no conversation = a clear error (start it in Messages first). `--service` is ignored now (Messages picks iMessage/SMS per conversation). The dry run now checks Messages can reach the target (sends nothing).
+- Verified: dry runs reach a real 1:1 (by guid and by handle) and a real group; a fake number gets "no conversation". The final `send` call itself is untested until the first approved real send. swift test 19/19, MCP 5/5.
+
 ## 2026-10-03 — 0.3.1: its own app identity
 - Problem (reported from Grok Bot): under Grok Bot Helper, `doctor --request` returned with no prompt; Calendar/Reminders/Contacts stayed "not asked yet", Contacts flickered "denied", and Terminal's grants didn't carry over (TCC charges the responsible app).
 - Fix: install.sh builds `~/Applications/Casa Desk.app` (same binary, LSUIElement, bundle id local.casa-desk, signed with an Apple Development identity when present, else ad-hoc). The CLI relays every command into it through LaunchServices, so all permissions belong to "Casa Desk". Exit codes and output pass through; `CASA_DESK_DIRECT=1` bypasses.

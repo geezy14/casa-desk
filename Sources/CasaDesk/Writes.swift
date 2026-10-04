@@ -392,7 +392,7 @@ func contactsWrite(_ a: Args, _ sub: String) -> Never {
 let notesWriteJXA = #"""
 function run(argv) {
   var a = JSON.parse(argv[0]);
-  var Notes = Application('Notes');
+  var Notes = Application('com.apple.Notes');
   if (a.mode === 'create') {
     var folder;
     if (a.folder) {
@@ -445,23 +445,52 @@ func notesWrite(_ a: Args, _ sub: String) -> Never {
 
 // MARK: - Messages: send (the Messages app's scripting dictionary — never UI scripting)
 
+// ⚠️ By BUNDLE ID, never by name: on macOS 27, Application('Messages') resolved to "Messages Assistant Extension", and
+// on the real app `service type` fails (AppleEvent handler failed), so picking an account by service crashed every
+// 1:1 send (2026-10-04). Sends now go to a CHAT by its id — the conversation that already exists — which is what
+// Messages itself does; it picks iMessage or SMS for that conversation. Mode 'check' resolves the target, sends nothing.
 let messagesSendJXA = #"""
 function run(argv) {
   var a = JSON.parse(argv[0]);
-  var Messages = Application('Messages');
-  var target;
-  if (a.chatGuid) {
-    target = Messages.chats.byId(a.chatGuid);
-    try { target.id(); } catch (e) { return JSON.stringify({ error: 'no chat with that guid', hint: 'Get it from casa-desk messages chats.' }); }
-  } else {
-    var accounts = Messages.accounts.whose({ serviceType: a.service })();
-    if (!accounts.length) return JSON.stringify({ error: 'no ' + a.service + ' account in Messages', hint: 'Sign in to Messages, or try --service sms.' });
-    target = accounts[0].participants.byName(a.to);
+  var M = Application('com.apple.MobileSMS');
+  function chat(id) { try { var c = M.chats.byId(id); c.id(); return c; } catch (e) { return null; } }
+  var target = null, via = '';
+  if (a.chatGuid) { target = chat(a.chatGuid); via = 'conversation'; }
+  if (!target && a.to) { target = chat('any;-;' + a.to); via = 'conversation'; }
+  if (!target && a.to) {
+    try { var ps = M.participants.whose({ handle: a.to })(); if (ps.length) { target = ps[0]; via = 'participant'; } } catch (e) {}
   }
-  Messages.send(a.text, { to: target });
-  return JSON.stringify({ sent: true });
+  if (!target) {
+    return JSON.stringify(a.chatGuid
+      ? { error: 'Messages has no chat with that id', hint: 'Get it again from casa-desk messages chats.' }
+      : { error: 'no conversation with ' + a.to + ' in Messages yet', hint: 'Send the first message to this person from Messages yourself; after that Casa Desk can send to them.' });
+  }
+  if (a.mode === 'check') return JSON.stringify({ ok: true, via: via });
+  M.send(a.text, { to: target });
+  return JSON.stringify({ sent: true, via: via });
 }
 """#
+
+/// The newest 1:1 conversation id in chat.db for this handle (e.g. "any;-;+13235550100"), if there is one.
+func oneToOneChat(_ handle: String) -> String? {
+    guard let db = ChatDB() else { return nil }
+    var st: OpaquePointer?
+    defer { sqlite3_finalize(st) }
+    let sql = """
+    SELECT c.guid, c.chat_identifier, COALESCE(MAX(cmj.message_date), 0) FROM chat c
+    LEFT JOIN chat_message_join cmj ON cmj.chat_id = c.ROWID
+    WHERE c.style = 45 GROUP BY c.ROWID ORDER BY 3 DESC
+    """
+    guard sqlite3_prepare_v2(db.db, sql, -1, &st, nil) == SQLITE_OK else { return nil }
+    let wantEmail = handle.contains("@"), key = wantEmail ? handle.lowercased() : Phone.key(handle)
+    while sqlite3_step(st) == SQLITE_ROW {
+        let ident = String(cString: sqlite3_column_text(st, 1))
+        if (wantEmail ? ident.lowercased() : Phone.key(ident)) == key, !ident.isEmpty {
+            return String(cString: sqlite3_column_text(st, 0))
+        }
+    }
+    return nil
+}
 
 /// --to NAME|NUMBER|EMAIL → one handle (and a name to show). A name must match exactly one number or email.
 func resolveRecipient(_ to: String) -> (handle: String, name: String?) {
@@ -487,10 +516,8 @@ func resolveRecipient(_ to: String) -> (handle: String, name: String?) {
 
 func messagesSend(_ a: Args) -> Never {
     let text = a.need("--text", "The exact message to send.")
-    let service = (a.options["--service"] ?? "imessage").lowercased()
-    guard service == "imessage" || service == "sms" else { Out.fail("bad --service", "Use imessage (default) or sms.", code: 2) }
-    let svc = service == "sms" ? "SMS" : "iMessage"
-    var payload: [String: Any] = ["text": text, "service": svc]
+    // --service is accepted for older callers and ignored: Messages picks iMessage or SMS for the conversation itself.
+    var payload: [String: Any] = ["text": text]
     var would: [String: Any] = ["text": text, "characters": text.count]
     let target: String
     if let guid = a.options["--chat-guid"] {
@@ -520,16 +547,22 @@ func messagesSend(_ a: Args) -> Never {
         let r = resolveRecipient(to)
         target = r.handle
         payload["to"] = r.handle
+        if let guid = oneToOneChat(r.handle) { payload["chatGuid"] = guid }    // the existing thread, as Messages knows it
         would["to"] = r.handle
         if let n = r.name { would["name"] = n }
-        would["service"] = svc
     }
-    let code = ConfirmCode.make(["messages", svc, target, text])
+    let code = ConfirmCode.make(["messages", target, text])
     if !loadAllowlist().allows(target) { would["allowlist"] = "NOT on ~/.config/casa-desk/allowlist — this send will be refused" }
-    if writeMode(a) == .preview { preview("send message", would, code: code) }
+    if writeMode(a) == .preview {
+        // Prove Messages can reach this conversation before anyone says yes (sends nothing).
+        var check = payload; check["mode"] = "check"; check["text"] = ""
+        let r = runJXA(messagesSendJXA, check, app: "Messages", timeout: 60)
+        would["reaches"] = (r["via"] as? String) == "participant" ? "Messages contact" : "existing conversation"
+        preview("send message", would, code: code)
+    }
     gateSend(a, code: code, allowTarget: target)
-    _ = runJXA(messagesSendJXA, payload, app: "Messages", timeout: 60)
-    done("send message", target: target, ["to": target, "characters": text.count, "sent": true])
+    let r = runJXA(messagesSendJXA, payload, app: "Messages", timeout: 60)
+    done("send message", target: target, ["to": target, "characters": text.count, "sent": r["sent"] as? Bool ?? false])
 }
 
 // MARK: - Mail: draft (opens for the person to review), send
@@ -537,7 +570,7 @@ func messagesSend(_ a: Args) -> Never {
 let mailWriteJXA = #"""
 function run(argv) {
   var a = JSON.parse(argv[0]);
-  var Mail = Application('Mail');
+  var Mail = Application('com.apple.mail');
   var msg = Mail.OutgoingMessage({ subject: a.subject, content: a.body, visible: a.mode === 'draft' });
   Mail.outgoingMessages.push(msg);
   a.to.forEach(function (x) { msg.toRecipients.push(Mail.ToRecipient({ address: x })); });

@@ -149,7 +149,7 @@ func shortcuts(_ a: Args) -> Never {
 let mailJXA = #"""
 function run(argv) {
   var a = JSON.parse(argv[0]);
-  var Mail = Application('Mail');
+  var Mail = Application('com.apple.mail');
   function box() {
     if (!a.mailbox || a.mailbox.toLowerCase() === 'inbox') {
       if (!a.account) return Mail.inbox;

@@ -125,11 +125,11 @@ func doctor(_ a: Args) async -> Never {
         "icloudDrive": FileManager.default.fileExists(atPath: iCloudRoot) ? "available" : "not set up on this Mac",
         "writes": "dry run unless --force; sends also need --confirm CODE",
         "allowlist": loadAllowlist().isActive ? "on (\(loadAllowlist().entries.count) entries)" : "off",
-        "version": "0.3.1",
+        "version": "0.3.2",
         "runsAs": Relay.inApp ? "Casa Desk.app (grant permissions to Casa Desk)" : (Relay.appPath == nil ? "the calling app (Casa Desk.app not installed — run scripts/install.sh)" : "the calling app (CASA_DESK_DIRECT=1)"),
     ]
     Out.emit(report) {
-        ["casa-desk 0.3.1  (runs as: \(report["runsAs"]!))",
+        ["casa-desk 0.3.2  (runs as: \(report["runsAs"]!))",
          "calendar:  \(report["calendar"]!)", "reminders: \(report["reminders"]!)", "contacts:  \(report["contacts"]!)",
          "notes:     \(report["notes"]!)", "messages:  \(report["messages"]!)", "mail:      \(report["mail"]!)",
          "focus:     \(report["focus"]!)", "safari:    \(report["safari"]!)", "icloud:    \(report["icloudDrive"]!)",
@@ -280,7 +280,7 @@ func contacts(_ a: Args) -> Never {
 let notesJXA = #"""
 function run(argv) {
   var a = JSON.parse(argv[0]);
-  var Notes = Application('Notes');
+  var Notes = Application('com.apple.Notes');
   function iso(d) { return d ? d.toISOString() : null; }
   function row(n, full) {
     var body = n.plaintext() || '';
@@ -346,7 +346,7 @@ func notes(_ a: Args) -> Never {
 // MARK: - Main
 
 let usage = """
-casa-desk 0.3.1 — Apple data for your assistants (local only, never UI scripting)
+casa-desk 0.3.2 — Apple data for your assistants (local only, never UI scripting)
 
 READ
 
@@ -390,7 +390,7 @@ WRITE (a dry run unless --force; show the person, then re-run with --force after
   casa-desk shortcuts run      --name NAME [--input TEXT]
 
 SEND (dry run prints a confirm code; send = --force --confirm CODE; each code sends once)
-  casa-desk messages send      --to NAME|NUMBER|EMAIL --text T [--service imessage|sms]
+  casa-desk messages send      --to NAME|NUMBER|EMAIL --text T   (an existing conversation)
   casa-desk messages send      --chat-guid GUID --text T      (group chats, guid from messages chats)
   casa-desk mail send          --to A[,B] --subject S [--body B] [--cc …] [--from ADDR]
 

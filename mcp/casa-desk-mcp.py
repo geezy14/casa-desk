@@ -14,7 +14,7 @@ import shutil
 import subprocess
 import sys
 
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -137,8 +137,8 @@ WRITE_TOOLS = {
     "messages_send": ("Send an iMessage/SMS. `to` (name, number or email) for one person, or `chat_guid` (from messages_chats) for a group. "
                       "First call WITHOUT confirm: show the person the exact text and recipient. Only after their yes, call again with "
                       "the SAME text, confirm: true and the confirm_code. Each code sends once.",
-                      {"to": S, "chat_guid": S, "text": S, "service": {"type": "string", "enum": ["imessage", "sms"]}, "confirm": CONFIRM, "confirm_code": CODE},
-                      ["text"], ["messages", "send"], {"to": "--to", "chat_guid": "--chat-guid", "text": "--text", "service": "--service"}, "send"),
+                      {"to": S, "chat_guid": S, "text": S, "confirm": CONFIRM, "confirm_code": CODE},
+                      ["text"], ["messages", "send"], {"to": "--to", "chat_guid": "--chat-guid", "text": "--text"}, "send"),
     "mail_send": ("Send an email through Mail. First call WITHOUT confirm and show the person the exact email. Only after their yes, "
                   "call again with the same fields, confirm: true and the confirm_code. Each code sends once.",
                   {"to": S, "cc": S, "subject": S, "body": S, "from": S, "confirm": CONFIRM, "confirm_code": CODE},
