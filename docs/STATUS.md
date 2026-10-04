@@ -3,7 +3,8 @@
 ## 2026-10-03 — 0.3.1: its own app identity
 - Problem (reported from Grok Bot): under Grok Bot Helper, `doctor --request` returned with no prompt; Calendar/Reminders/Contacts stayed "not asked yet", Contacts flickered "denied", and Terminal's grants didn't carry over (TCC charges the responsible app).
 - Fix: install.sh builds `~/Applications/Casa Desk.app` (same binary, LSUIElement, bundle id local.casa-desk, signed with an Apple Development identity when present, else ad-hoc). The CLI relays every command into it through LaunchServices, so all permissions belong to "Casa Desk". Exit codes and output pass through; `CASA_DESK_DIRECT=1` bypasses.
-- Verified on a Mac: doctor reports `runs as: Casa Desk.app` with its own (fresh) permission state, exit codes 0/3/4 pass through, MCP 5/5, swift test 19/19. `doctor --request` from the app NOT run here (it pops dialogs) — that's the first thing to test from Grok Bot.
+- Verified on a Mac: doctor reports `runs as: Casa Desk.app` with its own (fresh) permission state, exit codes 0/3/4 pass through, MCP 5/5, swift test 19/19.
+- 2026-10-04: `doctor --request` through the app showed the Casa Desk prompts; after Allow, calendar/reminders/contacts = granted and reads work.
 
 ## 2026-10-03 — 0.3.0: writes and sends ("everything but System Events")
 - New `Writes.swift`: reminders add/complete/edit; calendar create/update/cancel/delete (delete = the only delete, id + --force); contacts add/edit (never removes fields); notes create/append (JXA, HTML-escaped, never locked notes); messages send (Messages scripting dictionary, 1:1 `--to` or group `--chat-guid`); mail draft/send; shortcuts run.
