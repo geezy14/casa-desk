@@ -56,8 +56,13 @@ class MCPTest(unittest.TestCase):
         out = json.loads(reply["result"]["content"][0]["text"])
         if "error" in out and "binary not found" in out["error"]:
             self.skipTest("casa-desk not built")
-        self.assertTrue(out["dryRun"])
-        self.assertEqual(len(out["confirmCode"]), 8)
+        # A dry run first checks Messages can reach the person; a fake number has no conversation, so it stops there.
+        if "error" in out:
+            self.assertIn("no conversation", out["error"])
+            self.assertNotIn("sent", out)
+        else:
+            self.assertTrue(out["dryRun"])
+            self.assertEqual(len(out["confirmCode"]), 8)
 
     def test_confirm_without_code_is_refused(self):
         (reply,) = session([{"jsonrpc": "2.0", "id": 5, "method": "tools/call",
