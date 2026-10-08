@@ -102,6 +102,7 @@ casa-desk calendar cancel --id EVENT_ID
 casa-desk contacts edit --id CONTACT_ID --add-phone "323-555-0100"
 casa-desk notes create --title "Gate code" --body "4512"
 casa-desk messages send --to "Alex" --text "Running 10 late"     # then: --force --confirm CODE
+casa-desk messages send --to "Alex" --text "Here it is" --file ~/Desktop/plan.pdf   # --file attaches (repeatable)
 casa-desk mail draft --to landlord@example.com --subject "Lease" --body "Hi…"
 casa-desk shortcuts run --name "Good Night"
 ```

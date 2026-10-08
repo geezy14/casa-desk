@@ -14,7 +14,7 @@ import shutil
 import subprocess
 import sys
 
-VERSION = "0.3.2"
+VERSION = "0.3.3"
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -92,6 +92,7 @@ CONFIRM = {"type": "boolean", "description": "Leave out for a dry run. true ONLY
 CODE = {"type": "string", "description": "The confirmCode from this exact message's dry run (needed with confirm: true)."}
 WHEN = {"type": "string", "description": "YYYY-MM-DDTHH:MM, Los Angeles time (YYYY-MM-DD for all-day)"}
 S = {"type": "string"}
+FILES = {"type": "array", "items": {"type": "string"}, "description": "Full paths of files on this Mac to attach (each up to 100 MB)."}
 
 # name → (description, properties, required, argv prefix, {property: flag}, kind). kind: write | send | delete
 WRITE_TOOLS = {
@@ -130,18 +131,19 @@ WRITE_TOOLS = {
     "notes_append": ("Add text to the end of a note (id from notes_search; never locked notes). Dry run unless confirm.",
                      {"id": S, "text": S, "confirm": CONFIRM}, ["id", "text"], ["notes", "append"], {"id": "--id", "text": "--text"}, "write"),
     "mail_draft": ("Open a new email in Mail for the person to review and send themselves. Dry run unless confirm.",
-                   {"to": {"type": "string", "description": "Comma-separated addresses"}, "cc": S, "subject": S, "body": S, "from": S, "confirm": CONFIRM},
+                   {"to": {"type": "string", "description": "Comma-separated addresses"}, "cc": S, "subject": S, "body": S, "from": S, "files": FILES, "confirm": CONFIRM},
                    ["to", "subject"], ["mail", "draft"], {"to": "--to", "cc": "--cc", "subject": "--subject", "body": "--body", "from": "--from"}, "write"),
     "shortcuts_run": ("Run one of the person's Shortcuts by exact name, optionally with text input. Dry run unless confirm.",
                       {"name": S, "input": S, "confirm": CONFIRM}, ["name"], ["shortcuts", "run"], {"name": "--name", "input": "--input"}, "write"),
     "messages_send": ("Send an iMessage/SMS. `to` (name, number or email) for one person, or `chat_guid` (from messages_chats) for a group. "
                       "First call WITHOUT confirm: show the person the exact text and recipient. Only after their yes, call again with "
-                      "the SAME text, confirm: true and the confirm_code. Each code sends once.",
-                      {"to": S, "chat_guid": S, "text": S, "confirm": CONFIRM, "confirm_code": CODE},
-                      ["text"], ["messages", "send"], {"to": "--to", "chat_guid": "--chat-guid", "text": "--text"}, "send"),
+                      "the SAME text and files, confirm: true and the confirm_code. Each code sends once. `files` attaches files "
+                      "(text is optional then).",
+                      {"to": S, "chat_guid": S, "text": S, "files": FILES, "confirm": CONFIRM, "confirm_code": CODE},
+                      [], ["messages", "send"], {"to": "--to", "chat_guid": "--chat-guid", "text": "--text"}, "send"),
     "mail_send": ("Send an email through Mail. First call WITHOUT confirm and show the person the exact email. Only after their yes, "
-                  "call again with the same fields, confirm: true and the confirm_code. Each code sends once.",
-                  {"to": S, "cc": S, "subject": S, "body": S, "from": S, "confirm": CONFIRM, "confirm_code": CODE},
+                  "call again with the same fields, confirm: true and the confirm_code. Each code sends once. `files` attaches files.",
+                  {"to": S, "cc": S, "subject": S, "body": S, "from": S, "files": FILES, "confirm": CONFIRM, "confirm_code": CODE},
                   ["to", "subject"], ["mail", "send"], {"to": "--to", "cc": "--cc", "subject": "--subject", "body": "--body", "from": "--from"}, "send"),
 }
 BOOL_FLAGS = {"include_completed": "--include-completed", "groups": "--groups", "name_only": "--name-only",
@@ -187,6 +189,12 @@ def call_tool(name, args):
     for key, flag in flags.items():
         if args.get(key) not in (None, ""):
             argv.append(f"{flag}={args[key]}")          # one token, so a value starting with "-" stays a value
+    if "files" in props:
+        files = args.get("files") or []
+        if isinstance(files, str):
+            files = [files]
+        for f in files:
+            argv.append("--file=" + str(f))
     for key, flag in BOOL_FLAGS.items():
         if key in props and args.get(key) is True:
             argv.append(flag)

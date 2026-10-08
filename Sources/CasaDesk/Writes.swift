@@ -3,6 +3,7 @@ import SQLite3
 import EventKit
 import Contacts
 import CasaDeskCore
+import CryptoKit
 
 // v2 writes and sends — "everything but System Events" (2026-10-03).
 //
@@ -443,6 +444,58 @@ func notesWrite(_ a: Args, _ sub: String) -> Never {
     }
 }
 
+// MARK: - Attachments (--file, 0.3.3)
+
+// A send can carry files (2026-10-07: an assistant had to paste a file's text into a message because Casa Desk couldn't
+// attach it). --file PATH, repeatable. ⛔ The confirm code covers each file's path, size AND content hash, so the exact
+// file the person approved in the dry run is the only one --confirm can send; swap or edit the file and the code fails.
+
+struct Attachment { let path: String; let name: String; let bytes: Int; let sha: String }
+
+let maxAttachmentBytes = 100 * 1024 * 1024
+
+func attachments(_ a: Args) -> [Attachment] {
+    let fm = FileManager.default
+    let cwd = Relay.env["CASA_DESK_CWD"] ?? fm.currentDirectoryPath
+    return (a.multi["--file"] ?? []).map { raw in
+        let expanded = (raw as NSString).expandingTildeInPath
+        let abs = expanded.hasPrefix("/") ? expanded : (cwd as NSString).appendingPathComponent(expanded)
+        let path = ((abs as NSString).standardizingPath as NSString).resolvingSymlinksInPath
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue else {
+            Out.fail("no file at \(raw)", "--file takes the path to one file (not a folder). Repeat --file for more.", code: 2)
+        }
+        guard let data = fm.contents(atPath: path) else {
+            Out.fail("can't read \(raw)", "Allow Casa Desk to read that folder (System Settings → Privacy & Security → Files and Folders), or move the file somewhere it can read.", code: 3)
+        }
+        guard data.count <= maxAttachmentBytes else { Out.fail("\(raw) is over 100 MB", "Send a smaller file.", code: 2) }
+        let sha = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        return Attachment(path: path, name: (path as NSString).lastPathComponent, bytes: data.count, sha: sha)
+    }
+}
+
+/// What the dry run shows about the files, and what the confirm code is built from.
+func describe(_ files: [Attachment]) -> [String] {
+    files.map { "\($0.name) (\(ByteCountFormatter.string(fromByteCount: Int64($0.bytes), countStyle: .file)))" }
+}
+func codeParts(_ files: [Attachment]) -> [String] { files.map { "\($0.path)|\($0.bytes)|\($0.sha)" } }
+
+/// Messages is sandboxed and quietly fails ("Not Delivered") on files it can't read from most folders, so a copy of each
+/// file is staged in ~/Pictures/Casa Desk/ (a folder it can read) and sent from there. The copies are kept: Messages
+/// uploads after the script returns, and Casa Desk doesn't delete files.
+func stageForMessages(_ files: [Attachment]) -> [String] {
+    let fm = FileManager.default
+    let dir = home + "/Pictures/Casa Desk/" + UUID().uuidString.prefix(8)
+    do { try fm.createDirectory(atPath: dir, withIntermediateDirectories: true) } catch {
+        Out.fail("couldn't make \(dir)", error.localizedDescription, code: 5)
+    }
+    return files.map { f in
+        let dest = dir + "/" + f.name
+        do { try fm.copyItem(atPath: f.path, toPath: dest) } catch { Out.fail("couldn't stage \(f.name) for Messages", error.localizedDescription, code: 5) }
+        return dest
+    }
+}
+
 // MARK: - Messages: send (the Messages app's scripting dictionary — never UI scripting)
 
 // ⚠️ By BUNDLE ID, never by name: on macOS 27, Application('Messages') resolved to "Messages Assistant Extension", and
@@ -466,8 +519,10 @@ function run(argv) {
       : { error: 'no conversation with ' + a.to + ' in Messages yet', hint: 'Send the first message to this person from Messages yourself; after that Casa Desk can send to them.' });
   }
   if (a.mode === 'check') return JSON.stringify({ ok: true, via: via });
-  M.send(a.text, { to: target });
-  return JSON.stringify({ sent: true, via: via });
+  if (a.text) M.send(a.text, { to: target });
+  var files = 0;
+  (a.files || []).forEach(function (f) { M.send(Path(f), { to: target }); files++; });
+  return JSON.stringify({ sent: true, via: via, files: files });
 }
 """#
 
@@ -515,10 +570,12 @@ func resolveRecipient(_ to: String) -> (handle: String, name: String?) {
 }
 
 func messagesSend(_ a: Args) -> Never {
-    let text = a.need("--text", "The exact message to send.")
+    let files = attachments(a)
+    let text = files.isEmpty ? a.need("--text", "The exact message to send (or --file PATH to send a file).") : (a.options["--text"] ?? "")
     // --service is accepted for older callers and ignored: Messages picks iMessage or SMS for the conversation itself.
     var payload: [String: Any] = ["text": text]
     var would: [String: Any] = ["text": text, "characters": text.count]
+    if !files.isEmpty { would["files"] = describe(files) }
     let target: String
     if let guid = a.options["--chat-guid"] {
         guard a.options["--to"] == nil else { Out.fail("give --to or --chat-guid, not both", "--chat-guid is for group chats.", code: 2) }
@@ -551,7 +608,7 @@ func messagesSend(_ a: Args) -> Never {
         would["to"] = r.handle
         if let n = r.name { would["name"] = n }
     }
-    let code = ConfirmCode.make(["messages", target, text])
+    let code = ConfirmCode.make(["messages", target, text] + codeParts(files))
     if !loadAllowlist().allows(target) { would["allowlist"] = "NOT on ~/.config/casa-desk/allowlist — this send will be refused" }
     if writeMode(a) == .preview {
         // Prove Messages can reach this conversation before anyone says yes (sends nothing).
@@ -561,8 +618,11 @@ func messagesSend(_ a: Args) -> Never {
         preview("send message", would, code: code)
     }
     gateSend(a, code: code, allowTarget: target)
-    let r = runJXA(messagesSendJXA, payload, app: "Messages", timeout: 60)
-    done("send message", target: target, ["to": target, "characters": text.count, "sent": r["sent"] as? Bool ?? false])
+    if !files.isEmpty { payload["files"] = stageForMessages(files) }
+    let r = runJXA(messagesSendJXA, payload, app: "Messages", timeout: 120)
+    var result: [String: Any] = ["to": target, "characters": text.count, "sent": r["sent"] as? Bool ?? false]
+    if !files.isEmpty { result["files"] = describe(files) }
+    done("send message", target: target, result)
 }
 
 // MARK: - Mail: draft (opens for the person to review), send
@@ -576,6 +636,8 @@ function run(argv) {
   a.to.forEach(function (x) { msg.toRecipients.push(Mail.ToRecipient({ address: x })); });
   a.cc.forEach(function (x) { msg.ccRecipients.push(Mail.CcRecipient({ address: x })); });
   if (a.from) msg.sender = a.from;
+  (a.files || []).forEach(function (f) { msg.content.attachments.push(Mail.Attachment({ fileName: Path(f) })); });
+  if ((a.files || []).length) delay(1);   // Mail adds attachments asynchronously; sending at once can drop them
   if (a.mode === 'send') { msg.send(); return JSON.stringify({ sent: true }); }
   try { msg.save(); } catch (e) {}
   return JSON.stringify({ drafted: true, open: true });
@@ -593,11 +655,13 @@ func mailWrite(_ a: Args, _ sub: String) -> Never {
     let cc = emails(a.options["--cc"])
     let subject = a.need("--subject", "The email's subject line.")
     let body = a.options["--body"] ?? ""
-    var payload: [String: Any] = ["mode": sub, "to": to, "cc": cc, "subject": subject, "body": body]
+    let files = attachments(a)
+    var payload: [String: Any] = ["mode": sub, "to": to, "cc": cc, "subject": subject, "body": body, "files": files.map(\.path)]
     if let f = a.options["--from"] { payload["from"] = f }
     var would: [String: Any] = ["to": to.joined(separator: ", "), "subject": subject, "body": body]
     if !cc.isEmpty { would["cc"] = cc.joined(separator: ", ") }
     if let f = a.options["--from"] { would["from"] = f }
+    if !files.isEmpty { would["files"] = describe(files) }
 
     if sub == "draft" {
         // A draft changes nothing anyone else sees: it opens in Mail for the person to read, edit and send themselves.
@@ -605,13 +669,13 @@ func mailWrite(_ a: Args, _ sub: String) -> Never {
         let r = runJXA(mailWriteJXA, payload, app: "Mail")
         done("draft email", target: to.joined(separator: ","), r)
     }
-    let code = ConfirmCode.make(["mail", to.joined(separator: ","), cc.joined(separator: ","), a.options["--from"] ?? "", subject, body])
+    let code = ConfirmCode.make(["mail", to.joined(separator: ","), cc.joined(separator: ","), a.options["--from"] ?? "", subject, body] + codeParts(files))
     let blocked = (to + cc).filter { !loadAllowlist().allows($0) }
     if !blocked.isEmpty { would["allowlist"] = "NOT on the allowlist: \(blocked.joined(separator: ", ")) — this send will be refused" }
     if writeMode(a) == .preview { preview("send email", would, code: code) }
     gateSend(a, code: code, allowTarget: blocked.first ?? to[0])
     _ = runJXA(mailWriteJXA, payload, app: "Mail", timeout: 120)
-    done("send email", target: (to + cc).joined(separator: ","), ["to": to, "cc": cc, "subject": subject, "sent": true])
+    done("send email", target: (to + cc).joined(separator: ","), ["to": to, "cc": cc, "subject": subject, "sent": true, "files": describe(files)])
 }
 
 // MARK: - Shortcuts: run

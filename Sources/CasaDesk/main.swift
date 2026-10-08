@@ -44,6 +44,8 @@ let needsPermission = "needs permission: run casa-desk doctor --request (and cli
 struct Args {
     var positional: [String] = []
     var options: [String: String] = [:]
+    /// Every value of an option given more than once (e.g. several --file). `options` keeps the last one.
+    var multi: [String: [String]] = [:]
     var flags: Set<String> = []
 
     init(_ raw: [String]) {
@@ -53,8 +55,11 @@ struct Args {
                                      "--name-only", "--dry-run", "--force", "--all-day", "--clear-due", "--again"]
         while i < raw.count {
             let a = raw[i]
-            if a.hasPrefix("--"), let eq = a.firstIndex(of: "=") { options[String(a[..<eq])] = String(a[a.index(after: eq)...]); i += 1; continue }
-            if a.hasPrefix("--"), !switches.contains(a), i + 1 < raw.count { options[a] = raw[i + 1]; i += 2; continue }
+            if a.hasPrefix("--"), let eq = a.firstIndex(of: "=") {
+                let k = String(a[..<eq]), v = String(a[a.index(after: eq)...])
+                options[k] = v; multi[k, default: []].append(v); i += 1; continue
+            }
+            if a.hasPrefix("--"), !switches.contains(a), i + 1 < raw.count { options[a] = raw[i + 1]; multi[a, default: []].append(raw[i + 1]); i += 2; continue }
             if a.hasPrefix("--") { flags.insert(a); i += 1; continue }
             positional.append(a); i += 1
         }
@@ -125,11 +130,11 @@ func doctor(_ a: Args) async -> Never {
         "icloudDrive": FileManager.default.fileExists(atPath: iCloudRoot) ? "available" : "not set up on this Mac",
         "writes": "dry run unless --force; sends also need --confirm CODE",
         "allowlist": loadAllowlist().isActive ? "on (\(loadAllowlist().entries.count) entries)" : "off",
-        "version": "0.3.2",
+        "version": "0.3.3",
         "runsAs": Relay.inApp ? "Casa Desk.app (grant permissions to Casa Desk)" : (Relay.appPath == nil ? "the calling app (Casa Desk.app not installed — run scripts/install.sh)" : "the calling app (CASA_DESK_DIRECT=1)"),
     ]
     Out.emit(report) {
-        ["casa-desk 0.3.2  (runs as: \(report["runsAs"]!))",
+        ["casa-desk 0.3.3  (runs as: \(report["runsAs"]!))",
          "calendar:  \(report["calendar"]!)", "reminders: \(report["reminders"]!)", "contacts:  \(report["contacts"]!)",
          "notes:     \(report["notes"]!)", "messages:  \(report["messages"]!)", "mail:      \(report["mail"]!)",
          "focus:     \(report["focus"]!)", "safari:    \(report["safari"]!)", "icloud:    \(report["icloudDrive"]!)",
@@ -346,7 +351,7 @@ func notes(_ a: Args) -> Never {
 // MARK: - Main
 
 let usage = """
-casa-desk 0.3.2 — Apple data for your assistants (local only, never UI scripting)
+casa-desk 0.3.3 — Apple data for your assistants (local only, never UI scripting)
 
 READ
 
@@ -386,13 +391,14 @@ WRITE (a dry run unless --force; show the person, then re-run with --force after
   casa-desk contacts edit      --id ID [--first] [--last] [--nickname] [--org] [--add-phone P] [--add-email E]
   casa-desk notes create       --title T [--body B] [--folder NAME]
   casa-desk notes append       --id ID --text T
-  casa-desk mail draft         --to A[,B] --subject S [--body B] [--cc …] [--from ADDR]   (opens in Mail)
+  casa-desk mail draft         --to A[,B] --subject S [--body B] [--cc …] [--from ADDR] [--file PATH …]   (opens in Mail)
   casa-desk shortcuts run      --name NAME [--input TEXT]
 
 SEND (dry run prints a confirm code; send = --force --confirm CODE; each code sends once)
-  casa-desk messages send      --to NAME|NUMBER|EMAIL --text T   (an existing conversation)
-  casa-desk messages send      --chat-guid GUID --text T      (group chats, guid from messages chats)
-  casa-desk mail send          --to A[,B] --subject S [--body B] [--cc …] [--from ADDR]
+  casa-desk messages send      --to NAME|NUMBER|EMAIL --text T [--file PATH …]   (an existing conversation)
+  casa-desk messages send      --chat-guid GUID --text T [--file PATH …]      (group chats, guid from messages chats)
+  casa-desk mail send          --to A[,B] --subject S [--body B] [--cc …] [--from ADDR] [--file PATH …]
+                               (--file attaches a file; repeat it for more. --text is optional when a file is sent.)
 
   --json for JSON, --limit N (default 50). Optional send allowlist: ~/.config/casa-desk/allowlist.
 """

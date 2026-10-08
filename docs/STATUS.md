@@ -1,5 +1,12 @@
 # Casa Desk status
 
+## 2026-10-07 — 0.3.3: sends can attach files
+- Reported: an assistant had to send a skill file as pasted text because Casa Desk couldn't attach files.
+- `--file PATH` (repeatable) on `messages send`, `mail send` and `mail draft`; MCP tools take `files: [paths]`. `messages send` needs `--text` or `--file`. Files must exist, be readable, and be at most 100 MB. Relative paths resolve against the caller's folder (the relay passes `CASA_DESK_CWD`).
+- ⛔ The confirm code now covers each file's path, size and SHA-256, so only the file shown in the dry run can go; edit or swap it and the code fails. Text-only codes are unchanged.
+- Messages: each file is copied to `~/Pictures/Casa Desk/<id>/` and sent from there (Messages is sandboxed and silently fails on files it can't read). The copies are kept. Mail: attached via `Mail.Attachment`, with a 1 s pause before sending.
+- Verified: build, swift test 19/19, MCP 5/5, both JXA scripts compile, dry runs list the files, a wrong code is refused, editing the file changes the code. The real attach-and-send is untested until the first approved send.
+
 ## 2026-10-04 — 0.3.2: Messages send fixed for macOS 27
 - Reported from Grok Bot: a 1:1 send failed at `Messages.accounts.whose({serviceType})`. Root causes (probed read-only on macOS 27): `Application('Messages')` resolved to "Messages Assistant Extension", and on the real app reading `service type` fails ("AppleEvent handler failed").
 - Fix: every app is addressed by bundle id (com.apple.MobileSMS, com.apple.Notes, com.apple.mail). Sends go to the existing conversation by its chat id (from chat.db, e.g. `any;-;+1…`), falling back to a Messages participant by handle; no conversation = a clear error (start it in Messages first). `--service` is ignored now (Messages picks iMessage/SMS per conversation). The dry run now checks Messages can reach the target (sends nothing).

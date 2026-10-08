@@ -40,6 +40,7 @@ enum Relay {
         // -n new instance (calls can overlap) · -W wait for it · -g stay in the background.
         let argv = ["-n", "-W", "-g", "-a", app, "--stdout", out, "--stderr", err,
                     "--env", "CASA_DESK_IN_APP=1", "--env", "CASA_DESK_EXIT_FILE=\(code)",
+                    "--env", "CASA_DESK_CWD=\(fm.currentDirectoryPath)",          // the app starts in "/"; --file paths are the caller's
                     "--args"] + Array(CommandLine.arguments.dropFirst())
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/open")

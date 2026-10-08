@@ -19,7 +19,7 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.3.2</string>
+	<string>0.3.3</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>casa-desk reads your calendar so your assistants can answer questions about your schedule, and adds or changes events only when you approve it.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>

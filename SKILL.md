@@ -34,6 +34,7 @@ Run every command **on the user's registered Mac** (your `machineId` for this pe
 | add a number to a contact | `casa-desk contacts edit --id ID --add-phone P --json` |
 | a note | `casa-desk notes create --title T --body B --json` / `notes append --id ID --text T --json` |
 | a text | `casa-desk messages send --to "Name or number" --text "exact text" --json` (group: `--chat-guid` from `messages chats`) → after yes: add `--force --confirm CODE` |
+| a file by text or email | add `--file /full/path` (repeat for more) to `messages send`, `mail send` or `mail draft`. The dry run lists each file; the code covers the file itself, so if it changes, dry-run again. Never paste a file's contents into a message when you can attach it. |
 | an email to look over | `casa-desk mail draft --to A --subject S --body B --json` (opens in Mail; they send it) |
 | an email sent for them | `casa-desk mail send --to A --subject S --body B --json` → after yes: add `--force --confirm CODE` |
 | a Shortcut | `casa-desk shortcuts list --json` → exact name → `casa-desk shortcuts run --name N [--input TEXT] --json` |
