@@ -378,6 +378,9 @@ READ
   casa-desk safari bookmarks [--q TEXT]
   casa-desk safari reading-list [--q TEXT]
 
+  casa-desk db files  --db messages|calendar|reminders|contacts
+  casa-desk db query  --db NAME|--path FILE --sql "SELECT …" [--param V …]   (read-only SQL; one statement)
+
 WRITE (a dry run unless --force; show the person, then re-run with --force after their yes)
   casa-desk reminders add      --title T [--list NAME] [--due YYYY-MM-DD[THH:MM]] [--notes N] [--priority high|medium|low]
   casa-desk reminders complete --id ID
@@ -420,6 +423,7 @@ case "icloud": icloud(args)
 case "spotlight": spotlight(args)
 case "focus": focus(args)
 case "safari": safari(args)
+case "db": db(args)
 case "help", nil: print(usage); Relay.finish(0)
 default: Out.fail("unknown command \(args.positional.first!)", "Run casa-desk help.", code: 2)
 }

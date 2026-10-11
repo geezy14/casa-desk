@@ -1,5 +1,15 @@
 # Casa Desk status
 
+
+## 2026-10-11 — `db` (read-only SQL over Apple's local databases)
+
+`casa-desk db files --db messages|calendar|reminders|contacts` and `casa-desk db query --db NAME|--path FILE --sql "SELECT…"
+[--param V …]`. So a script that needs more than the other commands give (counting every conversation, calendar colours and
+attendees, a reminders double-check) can run with NO Full Disk Access of its own — Casa Desk holds it. Read-only three ways:
+`SQLITE_OPEN_READONLY` + `mode=ro`, `PRAGMA query_only`, and `sqlite3_stmt_readonly` on the single statement (SELECT/WITH
+only, one statement); values are bound parameters; only those four databases' files can be opened (`--path` must be one
+`db files` lists). Blobs come back as `{"b64": …}`. Verified: `DELETE` refused, `/etc/passwd` refused.
+
 ## 2026-10-07 — 0.3.3: sends can attach files
 - Reported: an assistant had to send a skill file as pasted text because Casa Desk couldn't attach files.
 - `--file PATH` (repeatable) on `messages send`, `mail send` and `mail draft`; MCP tools take `files: [paths]`. `messages send` needs `--text` or `--file`. Files must exist, be readable, and be at most 100 MB. Relative paths resolve against the caller's folder (the relay passes `CASA_DESK_CWD`).
