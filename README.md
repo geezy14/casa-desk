@@ -87,7 +87,7 @@ casa-desk contacts search --q sam
 casa-desk notes search --q wifi
 casa-desk messages search --who "Alex" --since 2026-09-01
 casa-desk messages search --search "dinner" --since 2026-09-01
-casa-desk mail search --q invoice
+casa-desk mail search --q invoice --since 2026-04-01   # every mailbox, Archive included
 casa-desk icloud list --path Documents
 casa-desk spotlight search --q lease --in ~/Documents
 casa-desk focus status

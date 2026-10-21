@@ -151,6 +151,15 @@ function run(argv) {
   var a = JSON.parse(argv[0]);
   var Mail = Application('com.apple.mail');
   function box() {
+    if (a.accountId && a.path) {
+      // From Mail's index: the account's id and the mailbox's path ("Archive/Receipts"), so a read needs no --mailbox.
+      var acct = Mail.accounts.byId(a.accountId);
+      if (a.path.toUpperCase() === 'INBOX') return acct.mailboxes.byName('INBOX');
+      try { var whole = acct.mailboxes.byName(a.path); whole.name(); return whole; } catch (e) {}
+      var parts = a.path.split('/'), cur = acct.mailboxes.byName(parts[0]);
+      for (var p = 1; p < parts.length; p++) cur = cur.mailboxes.byName(parts[p]);
+      return cur;
+    }
     if (!a.mailbox || a.mailbox.toLowerCase() === 'inbox') {
       if (!a.account) return Mail.inbox;
       return Mail.accounts.byName(a.account).mailboxes.byName('INBOX');
@@ -166,9 +175,14 @@ function run(argv) {
   var b;
   try { b = box(); b.name(); } catch (e) { return JSON.stringify({ error: 'mailbox not found', hint: String(e) }); }
   if (a.mode === 'read') {
-    var hits = b.messages.whose({ id: Number(a.id) })();
-    if (!hits.length) return JSON.stringify({ error: 'no message with that id in this mailbox', hint: 'Pass the same --mailbox you listed it from.' });
-    var m = hits[0];
+    // byId is a direct lookup; `whose` walks the whole mailbox (minutes on a big Archive), so it is only the fallback.
+    var m = null;
+    try { m = b.messages.byId(Number(a.id)); m.subject(); } catch (e) { m = null; }
+    if (!m) {
+      var hits = b.messages.whose({ id: Number(a.id) })();
+      if (!hits.length) return JSON.stringify({ error: 'no message with that id in this mailbox', hint: 'Pass the same --mailbox you listed it from.' });
+      m = hits[0];
+    }
     var body = m.content() || '';
     return JSON.stringify({ id: m.id(), subject: m.subject(), from: m.sender(), date: m.dateReceived().toISOString(),
       to: m.toRecipients.address(), cc: m.ccRecipients.address(), read: m.readStatus(),
@@ -186,6 +200,77 @@ function run(argv) {
 }
 """#
 
+/// Mail's own index ("Envelope Index"): the subject, sender, date and mailbox of every message in every mailbox, years
+/// back. `mail search` reads it directly. JXA `whose` only ever searched the inbox and timed out on a big Archive
+/// (2026-10-21: a six-month search came back with two weeks). Read-only like chat.db, same Full Disk Access; bodies are
+/// still read through Mail's scripting dictionary.
+enum MailIndex {
+    static func path() -> String? {
+        let dir = NSHomeDirectory() + "/Library/Mail"
+        let versions = ((try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? [])
+            .filter { $0.hasPrefix("V") }.compactMap { v in Int(v.dropFirst()).map { (v, $0) } }.sorted { $0.1 > $1.1 }
+        for (v, _) in versions {
+            let p = "\(dir)/\(v)/MailData/Envelope Index"
+            if FileManager.default.fileExists(atPath: p) { return p }
+        }
+        return nil
+    }
+
+    /// "imap://ACCOUNT-ID/Archive/Receipts" → ("ACCOUNT-ID", "Archive/Receipts")
+    static func split(_ url: String) -> (account: String, path: String) {
+        guard let r = url.range(of: "://") else { return ("", url) }
+        let rest = url[r.upperBound...]
+        guard let slash = rest.firstIndex(of: "/") else { return (String(rest), "") }
+        let path = String(rest[rest.index(after: slash)...])
+        return (String(rest[..<slash]), path.removingPercentEncoding ?? path)
+    }
+
+    static func search(q: String, since: Date?, until: Date?, mailbox: String?, limit: Int) -> Result<[[String: Any]], DBError> {
+        guard let path = path() else { return .failure(DBError(message: "Mail's index wasn't found")) }
+        let like = "%" + q.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "%", with: "\\%")
+            .replacingOccurrences(of: "_", with: "\\_") + "%"
+        var sql = """
+            SELECT m.ROWID, m.date_received, a.address, a.comment, s.subject, mb.url, m.read
+            FROM messages m JOIN subjects s ON s.ROWID = m.subject LEFT JOIN addresses a ON a.ROWID = m.sender
+            JOIN mailboxes mb ON mb.ROWID = m.mailbox
+            WHERE m.deleted = 0 AND (s.subject LIKE ? ESCAPE '\\' OR a.address LIKE ? ESCAPE '\\' OR a.comment LIKE ? ESCAPE '\\')
+            """
+        var params = [like, like, like]
+        if let since { sql += " AND m.date_received >= ?"; params.append(String(Int(since.timeIntervalSince1970))) }
+        if let until { sql += " AND m.date_received <= ?"; params.append(String(Int(until.timeIntervalSince1970))) }
+        sql += " ORDER BY m.date_received DESC"
+        switch runQuery(path: path, sql: sql, params: params) {
+        case .failure(let e): return .failure(e)
+        case .success(let r):
+            var out: [[String: Any]] = []
+            for row in r.rows {
+                let (account, box) = split(row[5] as? String ?? "")
+                // Mailbox filter after the split: the stored url is percent-encoded and nested ("Archive/Receipts").
+                // "Archive" takes the folder and everything under it; "Receipts" matches the last part.
+                if let mailbox {
+                    let b = box.lowercased(), m = mailbox.lowercased()
+                    guard b == m || b.hasPrefix(m + "/") || b.split(separator: "/").last.map(String.init) == m else { continue }
+                }
+                let addr = row[2] as? String ?? "", name = row[3] as? String ?? ""
+                let date = Date(timeIntervalSince1970: TimeInterval(row[1] as? Int64 ?? 0))
+                out.append(["id": row[0], "date": ISO8601DateFormatter().string(from: date), "subject": row[4] as? String ?? "",
+                            "from": name.isEmpty ? addr : "\(name) <\(addr)>", "mailbox": box, "account": account,
+                            "read": (row[6] as? Int64 ?? 0) != 0])
+                if out.count >= limit { break }
+            }
+            return .success(out)
+        }
+    }
+
+    /// Where one message lives, so `mail read --id` works without --mailbox.
+    static func locate(id: Int) -> (account: String, path: String)? {
+        guard let path = path(), case .success(let r) = runQuery(path: path,
+              sql: "SELECT mb.url FROM messages m JOIN mailboxes mb ON mb.ROWID = m.mailbox WHERE m.ROWID = ?",
+              params: [String(id)]), let url = r.rows.first?.first as? String else { return nil }
+        return split(url)
+    }
+}
+
 func mail(_ a: Args) -> Never {
     let sub = a.positional.dropFirst().first ?? "list"
     var payload: [String: Any] = ["limit": a.limit, "mode": sub]
@@ -193,11 +278,26 @@ func mail(_ a: Args) -> Never {
     if let acc = a.options["--account"] { payload["account"] = acc }
     switch sub {
     case "list": break
-    case "search": payload["q"] = a.need("--q", "Searches subject and sender, e.g. mail search --q invoice")
+    case "search":
+        let q = a.need("--q", "Searches subject and sender, e.g. mail search --q invoice --since 2026-04-01")
+        let since = a.day("--since"), until = a.options["--until"].flatMap { LA.endOfDay($0) }
+        switch MailIndex.search(q: q, since: since, until: until, mailbox: a.options["--mailbox"], limit: a.limit) {
+        case .success(let rows):
+            Out.emit(["count": rows.count, "source": "index", "messages": rows]) {
+                rows.isEmpty ? "No messages." : rows.map { "\($0["date"]!)  \($0["from"]!): \($0["subject"]!)  [\($0["mailbox"]!)]  id=\($0["id"]!)" }.joined(separator: "\n")
+            }
+        case .failure:
+            // No index access (Full Disk Access not granted): fall back to Mail itself, inbox (or --mailbox) only.
+            guard since == nil && until == nil else { Out.fail("mail search by date needs Full Disk Access", needsPermission, code: 3) }
+            payload["q"] = q
+        }
     case "read":
         let id = a.need("--id", "Get the id from mail list or mail search.")
-        guard Int(id) != nil else { Out.fail("bad --id", "Mail ids are numbers from mail list/search.", code: 2) }
+        guard let n = Int(id) else { Out.fail("bad --id", "Mail ids are numbers from mail list/search.", code: 2) }
         payload["id"] = id
+        if a.options["--mailbox"] == nil, let where_ = MailIndex.locate(id: n) {
+            payload["accountId"] = where_.account; payload["path"] = where_.path
+        }
     default: Out.fail("unknown mail command \(sub)", "Use: mail list | search | read | draft | send", code: 2)
     }
     let arg = String(data: try! JSONSerialization.data(withJSONObject: payload), encoding: .utf8)!

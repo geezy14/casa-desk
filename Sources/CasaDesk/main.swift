@@ -130,11 +130,11 @@ func doctor(_ a: Args) async -> Never {
         "icloudDrive": FileManager.default.fileExists(atPath: iCloudRoot) ? "available" : "not set up on this Mac",
         "writes": "dry run unless --force; sends also need --confirm CODE",
         "allowlist": loadAllowlist().isActive ? "on (\(loadAllowlist().entries.count) entries)" : "off",
-        "version": "0.3.3",
+        "version": "0.3.4",
         "runsAs": Relay.inApp ? "Casa Desk.app (grant permissions to Casa Desk)" : (Relay.appPath == nil ? "the calling app (Casa Desk.app not installed — run scripts/install.sh)" : "the calling app (CASA_DESK_DIRECT=1)"),
     ]
     Out.emit(report) {
-        ["casa-desk 0.3.3  (runs as: \(report["runsAs"]!))",
+        ["casa-desk 0.3.4  (runs as: \(report["runsAs"]!))",
          "calendar:  \(report["calendar"]!)", "reminders: \(report["reminders"]!)", "contacts:  \(report["contacts"]!)",
          "notes:     \(report["notes"]!)", "messages:  \(report["messages"]!)", "mail:      \(report["mail"]!)",
          "focus:     \(report["focus"]!)", "safari:    \(report["safari"]!)", "icloud:    \(report["icloudDrive"]!)",
@@ -351,7 +351,7 @@ func notes(_ a: Args) -> Never {
 // MARK: - Main
 
 let usage = """
-casa-desk 0.3.3 — Apple data for your assistants (local only, never UI scripting)
+casa-desk 0.3.4 — Apple data for your assistants (local only, never UI scripting)
 
 READ
 
@@ -368,8 +368,8 @@ READ
   casa-desk messages search --search TEXT [--since --until]
   casa-desk messages chats  [--q NAME]       (conversations with their chatGuid)
   casa-desk mail list       [--mailbox NAME] [--account NAME]
-  casa-desk mail search     --q TEXT          (subject and sender)
-  casa-desk mail read       --id ID [--mailbox NAME]
+  casa-desk mail search     --q TEXT [--since --until --mailbox]  (subject and sender, every mailbox)
+  casa-desk mail read       --id ID           (mailbox found from the id)
   casa-desk shortcuts list  [--q TEXT]
   casa-desk icloud list     [--path DIR]
   casa-desk icloud read     --path FILE       (text, downloaded files only)

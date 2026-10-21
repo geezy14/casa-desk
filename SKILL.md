@@ -39,6 +39,8 @@ Run every command **on the user's registered Mac** (your `machineId` for this pe
 | an email sent for them | `casa-desk mail send --to A --subject S --body B --json` → after yes: add `--force --confirm CODE` |
 | a Shortcut | `casa-desk shortcuts list --json` → exact name → `casa-desk shortcuts run --name N [--input TEXT] --json` |
 
+Finding an old email: `casa-desk mail search --q TEXT [--since YYYY-MM-DD] [--until …] [--mailbox Archive] --json` searches every mailbox (Archive and folders too), years back. Read one with `casa-desk mail read --id ID --json` — no mailbox needed.
+
 Times are Los Angeles time, `YYYY-MM-DDTHH:MM`. Ids come from the matching list/search command. If a name matches more than one number, Casa Desk lists them: ask the person which.
 
 ## Install

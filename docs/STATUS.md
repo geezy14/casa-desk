@@ -10,6 +10,13 @@ attendees, a reminders double-check) can run with NO Full Disk Access of its own
 only, one statement); values are bound parameters; only those four databases' files can be opened (`--path` must be one
 `db files` lists). Blobs come back as `{"b64": …}`. Verified: `DELETE` refused, `/etc/passwd` refused.
 
+## 2026-10-21 — 0.3.4: mail search reaches every mailbox and goes back years
+- `mail search` reads Mail's own index (`~/Library/Mail/V*/MailData/Envelope Index`, read-only, the same Full Disk Access chat.db needs): subject, sender, date and mailbox for every message in every mailbox. Before, it asked Mail through JXA, which only searched the inbox and timed out on a big Archive — a "go back 6 months" ask came back with two weeks. A six-month search now returns in under 0.1 s, Archive included.
+- New `--since` / `--until` (YYYY-MM-DD) and `--mailbox` takes a folder and everything under it (`Archive` includes `Archive/Bulk`) or matches the last part (`Receipts`). Each hit carries `mailbox`. Without index access it falls back to the old inbox-only JXA search (dates then need Full Disk Access).
+- `mail read --id` finds the message's mailbox from the index, so no `--mailbox` is needed, and looks the message up with `byId` instead of `whose` (which walked the whole mailbox).
+- `db query --db mail` exposes the same index (metadata only, never bodies).
+- Tests: `swift test`, `python3 Tests/test_mcp.py`. Search checked on a real Mac; the mail JXA syntax-checked with osacompile, not run (mail read needs Mail's Automation prompt).
+
 ## 2026-10-07 — 0.3.3: sends can attach files
 - Reported: an assistant had to send a skill file as pasted text because Casa Desk couldn't attach files.
 - `--file PATH` (repeatable) on `messages send`, `mail send` and `mail draft`; MCP tools take `files: [paths]`. `messages send` needs `--text` or `--file`. Files must exist, be readable, and be at most 100 MB. Relative paths resolve against the caller's folder (the relay passes `CASA_DESK_CWD`).

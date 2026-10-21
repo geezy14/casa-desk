@@ -6,7 +6,8 @@ import SQLite3
 // Running it through Casa Desk means only Casa Desk needs Full Disk Access, not every script that wants the data.
 // ⛔ READ-ONLY, three ways: SQLITE_OPEN_READONLY + `mode=ro`, `PRAGMA query_only`, and sqlite3_stmt_readonly on the
 //    one statement (SELECT / WITH only — anything else is refused). Values are bound parameters, never spliced (rule 6).
-// ⛔ Only these files: Messages, Calendar, Reminders, Contacts — no other path is opened.
+// ⛔ Only these files: Messages, Calendar, Reminders, Contacts, and Mail's Envelope Index (subjects, senders, dates,
+//    mailboxes — never message bodies) — no other path is opened.
 
 enum AppleDB {
     static let home = NSHomeDirectory()
@@ -25,10 +26,11 @@ enum AppleDB {
         case "contacts":
             let d = home + "/Library/Application Support/AddressBook/Sources"
             return each(d) { d + "/" + $0 + "/AddressBook-v22.abcddb" }
+        case "mail": return MailIndex.path().map { [$0] } ?? []
         default: return []
         }
     }
-    static let names = ["messages", "calendar", "reminders", "contacts"]
+    static let names = ["messages", "calendar", "reminders", "contacts", "mail"]
     /// A path is allowed only if it is one of the files above.
     static func allowed(_ path: String) -> Bool {
         let p = URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
@@ -40,8 +42,8 @@ func db(_ a: Args) {
     let sub = a.positional.dropFirst().first ?? ""
     switch sub {
     case "files":
-        let name = a.need("--db", "--db messages|calendar|reminders|contacts")
-        guard AppleDB.names.contains(name) else { Out.fail("unknown database \(name)", "Use messages, calendar, reminders or contacts.", code: 2) }
+        let name = a.need("--db", "--db messages|calendar|reminders|contacts|mail")
+        guard AppleDB.names.contains(name) else { Out.fail("unknown database \(name)", "Use messages, calendar, reminders, contacts or mail.", code: 2) }
         let fs = AppleDB.files(name)
         Out.emit(["db": name, "files": fs]) { fs.joined(separator: "\n") }
     case "query":
@@ -51,8 +53,8 @@ func db(_ a: Args) {
             guard AppleDB.allowed(p) else { Out.fail("not an allowed database", "--path must be one listed by `casa-desk db files`.", code: 2) }
             paths = [p]
         } else {
-            let name = a.need("--db", "--db messages|calendar|reminders|contacts, or --path FILE")
-            guard AppleDB.names.contains(name) else { Out.fail("unknown database \(name)", "Use messages, calendar, reminders or contacts.", code: 2) }
+            let name = a.need("--db", "--db messages|calendar|reminders|contacts|mail, or --path FILE")
+            guard AppleDB.names.contains(name) else { Out.fail("unknown database \(name)", "Use messages, calendar, reminders, contacts or mail.", code: 2) }
             paths = AppleDB.files(name)
         }
         let head = sql.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -76,7 +78,7 @@ func db(_ a: Args) {
 
 struct DBError: Error { let message: String }
 
-private func runQuery(path: String, sql: String, params: [String]) -> Result<(columns: [String], rows: [[Any]]), DBError> {
+func runQuery(path: String, sql: String, params: [String]) -> Result<(columns: [String], rows: [[Any]]), DBError> {
     var h: OpaquePointer?
     guard sqlite3_open_v2("file:\(path)?mode=ro", &h, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil) == SQLITE_OK, let h else {
         if let h { sqlite3_close(h) }
